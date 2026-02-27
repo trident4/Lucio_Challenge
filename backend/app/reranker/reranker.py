@@ -108,7 +108,7 @@ def rerank_all(
                     }
                 )
 
-        # ── Build context with ±1 neighbor enrichment ──
+        # ── Build context: headers + top chunks (no neighbors) ──
         context_parts = []
 
         # Headers first (document intros)
@@ -117,26 +117,9 @@ def rerank_all(
                 f"[SOURCE: {hc['filename']} — DOCUMENT HEADER]\n{hc['content']}"
             )
 
-        # Then top reranked chunks with neighbors
+        # Then top reranked chunks
         for c in top_chunks:
-            chunk_idx = _extract_chunk_index(c["chunk_id"])
-            filename = c["filename"]
-
-            parts = []
-            # Previous chunk (context_before)
-            prev_content = all_chunks_by_file.get((filename, chunk_idx - 1))
-            if prev_content:
-                parts.append(prev_content)
-
-            # Main chunk
-            parts.append(c["content"])
-
-            # Next chunk (context_after)
-            next_content = all_chunks_by_file.get((filename, chunk_idx + 1))
-            if next_content:
-                parts.append(next_content)
-
-            context_parts.append(f"[SOURCE: {filename}]\n" + "\n---\n".join(parts))
+            context_parts.append(f"[SOURCE: {c['filename']}]\n{c['content']}")
 
         # Include header chunks in sources
         all_source_chunks = header_chunks + top_chunks

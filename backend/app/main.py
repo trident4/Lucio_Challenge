@@ -1,7 +1,8 @@
 """FastAPI application — the 30-second orchestrator.
 
 Single endpoint POST /challenge/run wires all phases together
-with per-phase wall-clock timing.
+with per-phase wall-clock timing. Includes corpus caching to skip
+Phases 1-3 on repeated requests with the same corpus.
 """
 
 import asyncio
@@ -22,7 +23,13 @@ from app.reranker.reranker import rerank_all
 from app.schemas import ChallengeRequest, ChallengeResponse
 from app.search.indexer import build_index
 from app.search.retriever import search_all
-from app.state import doc_metadata, vector_cache
+from app.state import (
+    corpus_hash,
+    doc_metadata,
+    get_cached_corpus,
+    set_cached_corpus,
+    vector_cache,
+)
 
 logger = logging.getLogger("lucio")
 
@@ -88,26 +95,60 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     settings: Settings = request.app.state.settings
     t = [time.perf_counter()]
 
-    # ── Phase 1: Fetch + Extract ────────────────────────────────────────
-    vector_cache.clear()  # Prevent stale data from prior requests
-    doc_metadata.clear()
-
+    # ── Phase 1: Fetch + Extract (cached) ───────────────────────────────
     zip_bytes = await fetch_corpus(req.corpus_url)
-    file_tuples = unzip_to_tuples(zip_bytes)
-    loop = asyncio.get_event_loop()
-    chunks, metadata = await loop.run_in_executor(None, run_extraction, file_tuples)
-    doc_metadata.extend(metadata)
-    log_phase("Phase 1: Extract", t)
+    cache_key = corpus_hash(req.corpus_url, zip_bytes)
+    cached = get_cached_corpus(cache_key)
 
-    # ── Phase 2: Tantivy Index ──────────────────────────────────────────
-    index = build_index(chunks)
-    log_phase("Phase 2: Index", t)
+    if cached:
+        # Cache hit — reuse chunks, index, metadata, embeddings
+        chunks = cached["chunks"]
+        index = cached["index"]
+
+        doc_metadata.clear()
+        doc_metadata.extend(cached["metadata"])
+
+        # Reuse cached embeddings
+        vector_cache.clear()
+        vector_cache.update(cached["vectors"])
+
+        logger.info(f"⚡ Corpus cache HIT ({cache_key}) — skipping extract+index+embed")
+        log_phase("Phase 1-3: Cache Hit", t)
+    else:
+        # Cache miss — full extraction pipeline
+        vector_cache.clear()
+        doc_metadata.clear()
+
+        file_tuples = unzip_to_tuples(zip_bytes)
+        loop = asyncio.get_event_loop()
+        chunks, metadata = await loop.run_in_executor(None, run_extraction, file_tuples)
+        doc_metadata.extend(metadata)
+        log_phase("Phase 1: Extract", t)
+
+        # ── Phase 2: Tantivy Index ──────────────────────────────────────
+        index = build_index(chunks)
+        log_phase("Phase 2: Index", t)
 
     # ── Phase 3: Retrieve + Embed ───────────────────────────────────────
     search_results = await search_all(index, req.questions, settings.bm25_top_k)
     await embed_and_cache(client, search_results, vector_cache, settings)
     q_vectors = await embed_questions(client, req.questions, settings)
     log_phase("Phase 3: Retrieve+Embed", t)
+
+    # Cache corpus data for next request (after embedding so vectors are cached)
+    if not cached:
+        set_cached_corpus(
+            cache_key,
+            {
+                "chunks": chunks,
+                "index": index,
+                "metadata": list(doc_metadata),
+                "vectors": dict(vector_cache),
+            },
+        )
+        logger.info(
+            f"💾 Corpus cached ({cache_key}): {len(chunks)} chunks, {len(vector_cache)} vectors"
+        )
 
     # ── Phase 4: Rerank ─────────────────────────────────────────────────
     reranked = rerank_all(

@@ -22,7 +22,7 @@ import fitz  # PyMuPDF
 logger = logging.getLogger("lucio.workers")
 
 # Chunking parameters — small, focused chunks for precise retrieval
-CHUNK_SIZE = 2000  # chars per chunk (~500 tokens, ~half a page)
+CHUNK_SIZE = 4000  # Increased from 2000 to better capture full financial tables
 
 # Document type classification patterns
 SCOTUS_PATTERN = re.compile(r"\d+\s+U\.S\.\s+\d+")
