@@ -85,8 +85,39 @@ def rerank_all(
         hit_lookup = {h["chunk_id"]: h for h in valid_hits}
         top_chunks = [hit_lookup[cid] for cid in top_ids]
 
+        # ── Inject document headers (chunk_0) ──
+        # For each unique document in top results, ensure chunk_0 is in context.
+        # This provides case headers (justices), exec summaries, etc.
+        seen_files = set()
+        header_chunks = []
+        for c in top_chunks:
+            seen_files.add(c["filename"])
+
+        for filename in seen_files:
+            header_key = (filename, 0)
+            header_content = all_chunks_by_file.get(header_key)
+            # Only add if chunk_0 exists and isn't already in top chunks
+            header_cid = f"{filename}::chunk_0"
+            if header_content and header_cid not in top_ids:
+                header_chunks.append(
+                    {
+                        "chunk_id": header_cid,
+                        "filename": filename,
+                        "content": header_content,
+                        "page_nums": [1],
+                    }
+                )
+
         # ── Build context with ±1 neighbor enrichment ──
         context_parts = []
+
+        # Headers first (document intros)
+        for hc in header_chunks:
+            context_parts.append(
+                f"[SOURCE: {hc['filename']} — DOCUMENT HEADER]\n{hc['content']}"
+            )
+
+        # Then top reranked chunks with neighbors
         for c in top_chunks:
             chunk_idx = _extract_chunk_index(c["chunk_id"])
             filename = c["filename"]
@@ -107,11 +138,13 @@ def rerank_all(
 
             context_parts.append(f"[SOURCE: {filename}]\n" + "\n---\n".join(parts))
 
+        # Include header chunks in sources
+        all_source_chunks = header_chunks + top_chunks
         result[q_id] = {
             "context": "\n\n===\n\n".join(context_parts),
             "sources": [
                 {"filename": c["filename"], "page_nums": c["page_nums"]}
-                for c in top_chunks
+                for c in all_source_chunks
             ],
         }
 

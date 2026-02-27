@@ -23,6 +23,26 @@ logger = logging.getLogger("lucio.workers")
 
 # Chunking parameters — small, focused chunks for precise retrieval
 CHUNK_SIZE = 2000  # chars per chunk (~500 tokens, ~half a page)
+
+# Document type classification patterns
+SCOTUS_PATTERN = re.compile(r"\d+\s+U\.S\.\s+\d+")
+
+
+def _classify_document(filename: str) -> str:
+    """Classify document type from filename using regex patterns.
+
+    Reliable code-based classification instead of asking the LLM to
+    pattern-match filenames in the prompt.
+    """
+    if SCOTUS_PATTERN.search(filename):
+        return "SCOTUS case"
+    if " v. " in filename or " v " in filename:
+        return "Legal case"
+    if filename.lower().endswith(".docx"):
+        return "Agreement/Contract"
+    return "Document"
+
+
 CHUNK_OVERLAP = 200  # chars overlap between chunks
 HEADER_CHARS = 400  # chars from page 1 for identifying the document
 
@@ -116,6 +136,7 @@ def _extract_pdf(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
     metadata = {
         "filename": filename,
         "title": title,
+        "type": _classify_document(filename),
         "page_count": page_count,
     }
     return chunks, metadata
@@ -149,6 +170,7 @@ def _extract_docx(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
     metadata = {
         "filename": filename,
         "title": title,
+        "type": _classify_document(filename),
         "page_count": 0,
     }
     return chunks, metadata
