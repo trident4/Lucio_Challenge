@@ -2,6 +2,11 @@
 
 Embeds only cache-miss chunks (deduped across questions),
 batched in groups of EMBEDDING_BATCH_SIZE.
+
+Key design decisions:
+- Uses the raw 'content' field for embedding (no metadata tags)
+- Truncates text to MAX_EMBED_CHARS before sending (embedding model context safety)
+- Default batch size is 20 (not 100) to stay within nginx/API body limits
 """
 
 import logging
@@ -12,6 +17,18 @@ from openai import AsyncOpenAI
 from app.config import Settings
 
 logger = logging.getLogger("lucio.embedder")
+
+# Nomic Embed v1.5 has 8192 token context (~32K chars).
+# Our 5-page chunks are well within this, but we add a safety cap
+# in case a chunk is unusually large.
+MAX_EMBED_CHARS = 24_000
+
+
+def _prepare_for_embedding(text: str) -> str:
+    """Truncate text to a safe length for the embedding model."""
+    if len(text) > MAX_EMBED_CHARS:
+        return text[:MAX_EMBED_CHARS]
+    return text
 
 
 async def embed_batch(
@@ -27,7 +44,7 @@ async def embed_batch(
 
     Args:
         client: AsyncOpenAI client pointing to Mac Studio.
-        texts: List of text strings to embed.
+        texts: List of text strings to embed (already truncated).
         settings: App settings.
 
     Returns:
@@ -66,23 +83,27 @@ async def embed_and_cache(
 ) -> None:
     """Embed all uncached chunks from search results.
 
+    Uses the 'content' field (raw document text) for embedding,
+    NOT the 'text' field (which has [HEADER]/[SOURCE]/[PAGES] metadata).
+
     Deduplicates chunk_ids across all questions, then batches
     API calls in groups of embedding_batch_size.
 
     Args:
         client: AsyncOpenAI client.
-        search_results: question_id -> list of hit dicts (with chunk_id, text).
+        search_results: question_id -> list of hit dicts.
         vector_cache: Global cache to update in-place.
         settings: App settings.
     """
-    # Build text lookup from all search results (deduplicates naturally)
-    text_lookup: dict[str, str] = {}
+    # Build content lookup from all search results (deduplicates naturally)
+    # Use 'content' (raw text) for embedding, not 'text' (enriched with metadata)
+    content_lookup: dict[str, str] = {}
     for hits in search_results.values():
         for h in hits:
-            text_lookup[h["chunk_id"]] = h["text"]
+            content_lookup[h["chunk_id"]] = h["content"]
 
     # Find cache misses
-    missing = [cid for cid in text_lookup if cid not in vector_cache]
+    missing = [cid for cid in content_lookup if cid not in vector_cache]
     if not missing:
         logger.info("All chunks already cached — skipping embedding")
         return
@@ -91,13 +112,18 @@ async def embed_and_cache(
         f"Embedding {len(missing)} uncached chunks in batches of {settings.embedding_batch_size}"
     )
 
-    # Batch embed
+    # Batch embed with truncation
     for i in range(0, len(missing), settings.embedding_batch_size):
         batch_ids = missing[i : i + settings.embedding_batch_size]
-        batch_texts = [text_lookup[cid] for cid in batch_ids]
+        batch_texts = [
+            _prepare_for_embedding(f"search_document: {content_lookup[cid]}")
+            for cid in batch_ids
+        ]
         vectors = await embed_batch(client, batch_texts, settings)
         for cid, vec in zip(batch_ids, vectors):
             vector_cache[cid] = vec
+
+    logger.info(f"Cached {len(missing)} new chunk vectors")
 
 
 async def embed_questions(
@@ -115,7 +141,7 @@ async def embed_questions(
     Returns:
         Dict mapping question_id -> 256d numpy vector.
     """
-    texts = [q.text for q in questions]
+    texts = [f"search_query: {q.text}" for q in questions]
     vectors = await embed_batch(client, texts, settings)
     result = {q.id: v for q, v in zip(questions, vectors)}
     logger.info(f"Embedded {len(questions)} question vectors")

@@ -1,8 +1,13 @@
-"""Phase 1b: Multi-core document extraction with high-fidelity chunking.
+"""Phase 1b: Multi-core document extraction with focused chunking.
 
 All functions are top-level (picklable) for ProcessPoolExecutor.
-PDF: PyMuPDF layout mode, 5-page sliding window, 2-page overlap.
-DOCX: python-docx, 25-paragraph batch, 10-paragraph overlap.
+PDF: PyMuPDF layout mode, ~2000-char chunks with 200-char overlap.
+DOCX: python-docx, ~2000-char chunks with 200-char overlap.
+
+Chunks are small and focused (~half a page) so that:
+- Embeddings capture specific content, not diffuse 5-page averages
+- BM25 matches are precise (fewer irrelevant terms per chunk)
+- Full chunk text can be sent to the LLM without truncation
 """
 
 import io
@@ -16,12 +21,10 @@ import fitz  # PyMuPDF
 
 logger = logging.getLogger("lucio.workers")
 
-# Chunking parameters
-PDF_WINDOW = 5  # pages per chunk
-PDF_STRIDE = 3  # stride (window - overlap)
-DOCX_WINDOW = 25  # paragraphs per chunk
-DOCX_STRIDE = 15  # stride (window - overlap)
-HEADER_CHARS = 400  # chars from page 1 for header
+# Chunking parameters — small, focused chunks for precise retrieval
+CHUNK_SIZE = 2000  # chars per chunk (~500 tokens, ~half a page)
+CHUNK_OVERLAP = 200  # chars overlap between chunks
+HEADER_CHARS = 400  # chars from page 1 for identifying the document
 
 
 def run_extraction(
@@ -68,7 +71,6 @@ def extract_document(filename: str, file_bytes: bytes) -> tuple[list[dict], dict
     elif ext == ".docx":
         return _extract_docx(filename, file_bytes)
     else:
-        # Unsupported format — return empty
         return [], {"filename": filename, "title": "", "page_count": 0}
 
 
@@ -78,8 +80,8 @@ def extract_document(filename: str, file_bytes: bytes) -> tuple[list[dict], dict
 def _extract_pdf(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
     """Extract text from a PDF using PyMuPDF layout mode.
 
-    Uses a 5-page sliding window with 2-page overlap to preserve
-    financial table context and footnote associations.
+    Extracts each page's text, then splits into ~2000-char chunks
+    with 200-char overlap. Tracks which page(s) each chunk spans.
     """
     doc = fitz.open(stream=file_bytes, filetype="pdf")
     page_count = len(doc)
@@ -95,24 +97,19 @@ def _extract_pdf(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
     # Title: first non-empty line
     title = _extract_title(page_texts[0] if page_texts else "")
 
-    # Build chunks with sliding window
-    chunks: list[dict] = []
-    if page_count <= PDF_WINDOW:
-        # Small file: single chunk
-        text = "\n".join(page_texts)
-        pages = list(range(1, page_count + 1))
-        chunks.append(_make_chunk(filename, header, text, pages, 0))
-    else:
-        chunk_idx = 0
-        for start in range(0, page_count, PDF_STRIDE):
-            end = min(start + PDF_WINDOW, page_count)
-            text = "\n".join(page_texts[start:end])
-            pages = list(range(start + 1, end + 1))  # 1-indexed
-            chunks.append(_make_chunk(filename, header, text, pages, chunk_idx))
-            chunk_idx += 1
-            # Stop if we've reached the end
-            if end == page_count:
-                break
+    # Build page boundary map: (start_char_offset, page_number)
+    # This lets us track which page(s) each chunk falls on.
+    page_boundaries: list[tuple[int, int]] = []
+    offset = 0
+    for i, pt in enumerate(page_texts):
+        page_boundaries.append((offset, i + 1))  # 1-indexed page numbers
+        offset += len(pt) + 1  # +1 for the newline joiner
+
+    # Join all pages into one continuous string
+    full_text = "\n".join(page_texts)
+
+    # Split into focused chunks with overlap
+    chunks = _split_into_chunks(full_text, filename, header, page_boundaries)
 
     doc.close()
 
@@ -130,43 +127,106 @@ def _extract_pdf(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
 def _extract_docx(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
     """Extract text from a DOCX using python-docx.
 
-    Uses 25-paragraph batching with 10-paragraph overlap to keep
-    legal definitions in context with the clauses that reference them.
+    Joins paragraphs into a single string, then splits into
+    ~2000-char chunks with 200-char overlap.
     """
     document = docx.Document(io.BytesIO(file_bytes))
     paragraphs = [p.text for p in document.paragraphs if p.text.strip()]
-    para_count = len(paragraphs)
 
-    # Header: first 400 chars of all paragraphs joined
+    # Header: first 400 chars
     raw_header = " ".join(paragraphs)[:HEADER_CHARS]
     header = _sanitize_header(raw_header)
 
     # Title: first non-empty paragraph
     title = paragraphs[0].strip() if paragraphs else ""
 
-    # Build chunks
-    chunks: list[dict] = []
-    if para_count <= DOCX_WINDOW:
-        # Small file: single chunk
-        text = "\n".join(paragraphs)
-        chunks.append(_make_chunk(filename, header, text, [0], 0))
-    else:
-        chunk_idx = 0
-        for start in range(0, para_count, DOCX_STRIDE):
-            end = min(start + DOCX_WINDOW, para_count)
-            text = "\n".join(paragraphs[start:end])
-            # DOCX has no reliable page numbers
-            chunks.append(_make_chunk(filename, header, text, [0], chunk_idx))
-            chunk_idx += 1
-            if end == para_count:
-                break
+    # Join all paragraphs
+    full_text = "\n".join(paragraphs)
+
+    # DOCX has no reliable page numbers, so no page boundaries
+    chunks = _split_into_chunks(full_text, filename, header, page_boundaries=None)
 
     metadata = {
         "filename": filename,
         "title": title,
-        "page_count": 0,  # DOCX has no reliable page count
+        "page_count": 0,
     }
     return chunks, metadata
+
+
+# ── Core Chunking Logic ────────────────────────────────────────────────────
+
+
+def _split_into_chunks(
+    full_text: str,
+    filename: str,
+    header: str,
+    page_boundaries: list[tuple[int, int]] | None,
+) -> list[dict]:
+    """Split text into small, focused chunks with overlap.
+
+    Tries to break at paragraph boundaries (double newline) rather
+    than mid-sentence for cleaner chunks.
+
+    Args:
+        full_text: The complete document text.
+        filename: Source filename.
+        header: Document header for identification.
+        page_boundaries: List of (char_offset, page_num) for PDFs.
+                         None for DOCX.
+
+    Returns:
+        List of chunk dicts.
+    """
+    if not full_text.strip():
+        return []
+
+    chunks = []
+    text_len = len(full_text)
+    start = 0
+    chunk_idx = 0
+
+    while start < text_len:
+        # Determine chunk end
+        end = min(start + CHUNK_SIZE, text_len)
+
+        # Try to break at a paragraph boundary (double newline)
+        if end < text_len:
+            break_point = full_text.rfind("\n\n", start + CHUNK_SIZE // 2, end)
+            if break_point > start:
+                end = break_point
+
+        content = full_text[start:end].strip()
+        if content:
+            # Determine which pages this chunk spans
+            page_nums = _get_page_nums(start, end, page_boundaries)
+
+            chunks.append(_make_chunk(filename, header, content, page_nums, chunk_idx))
+            chunk_idx += 1
+
+        # Advance with overlap
+        start = end - CHUNK_OVERLAP if end < text_len else text_len
+
+    return chunks
+
+
+def _get_page_nums(
+    start: int, end: int, page_boundaries: list[tuple[int, int]] | None
+) -> list[int]:
+    """Determine which pages a chunk spans based on character offsets."""
+    if page_boundaries is None:
+        return [0]
+
+    pages = set()
+    for i, (offset, page_num) in enumerate(page_boundaries):
+        # Check if this page overlaps with our chunk [start, end)
+        next_offset = (
+            page_boundaries[i + 1][0] if i + 1 < len(page_boundaries) else float("inf")
+        )
+        if offset < end and next_offset > start:
+            pages.add(page_num)
+
+    return sorted(pages) if pages else [0]
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -193,7 +253,11 @@ def _make_chunk(
     page_nums: list[int],
     index: int,
 ) -> dict:
-    """Build a chunk dict with the required text template."""
+    """Build a chunk dict with enriched text and raw content.
+
+    - text:    enriched with [HEADER]/[SOURCE]/[PAGES] — for BM25 indexing and LLM context
+    - content: raw document text only — for embedding (no metadata noise)
+    """
     chunk_id = f"{filename}::chunk_{index}"
     text = (
         f"[HEADER: {header}] "
@@ -206,4 +270,5 @@ def _make_chunk(
         "filename": filename,
         "page_nums": page_nums,
         "text": text,
+        "content": content,
     }

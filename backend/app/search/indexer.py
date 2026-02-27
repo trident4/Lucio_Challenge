@@ -3,6 +3,7 @@
 Builds a Rust-backed inverted index purely in RAM — no disk I/O.
 """
 
+import json
 import logging
 
 import tantivy
@@ -29,8 +30,9 @@ def build_index(chunks: list[dict]) -> tantivy.Index:
     builder = tantivy.SchemaBuilder()
     builder.add_text_field("chunk_id", stored=True)
     builder.add_text_field("text", stored=True, index_option="position")
+    builder.add_text_field("content", stored=True)  # raw text for embedding
     builder.add_text_field("filename", stored=True)
-    builder.add_json_field("page_nums", stored=True)
+    builder.add_text_field("page_nums", stored=True)
     schema = builder.build()
 
     # Create RAM-only index
@@ -43,8 +45,9 @@ def build_index(chunks: list[dict]) -> tantivy.Index:
             tantivy.Document(
                 chunk_id=[chunk["chunk_id"]],
                 text=[chunk["text"]],
+                content=[chunk["content"]],
                 filename=[chunk["filename"]],
-                page_nums=chunk["page_nums"],
+                page_nums=[json.dumps(chunk["page_nums"])],
             )
         )
 

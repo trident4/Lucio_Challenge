@@ -17,9 +17,17 @@ from app.config import Settings
 logger = logging.getLogger("lucio.inference")
 
 SYSTEM_PROMPT = (
-    "You are an expert analyst. Answer using ONLY the provided context. "
-    "If the answer is not in the context, state that clearly. "
-    "Be concise and precise."
+    "You are a precise document analyst. Answer ONLY from the provided context. "
+    "Never use prior knowledge or training data.\n\n"
+    "Rules:\n"
+    "1. Use EXACT figures, names, and dates as written in the context — "
+    "do not round, paraphrase, or approximate numbers.\n"
+    "2. When multiple documents are relevant, cross-reference them.\n"
+    "3. If calculation is needed, state the exact values from the context "
+    "and show your math step by step.\n"
+    '4. If the answer is not in the context, say: "This information is not '
+    'available in the provided documents."\n'
+    "5. Never guess or fill gaps with assumptions."
 )
 
 # Heuristic: questions matching these patterns likely need the full
@@ -38,15 +46,23 @@ def _build_user_prompt(
 ) -> str:
     """Build the user prompt, optionally injecting document metadata.
 
-    For counting/listing questions, the full corpus document index
-    is injected alongside the retrieved chunk context so the LLM
-    can count files, list document names, etc.
-    """
-    parts = [f"CONTEXT:\n{context}"]
+    Context is already capped per-chunk by the reranker, so no
+    additional truncation is needed here.
 
-    if COUNTING_KEYWORDS.search(question_text):
+    For counting/listing questions, the document index is placed FIRST
+    so the LLM uses it as the primary source for counting.
+    """
+    is_counting = bool(COUNTING_KEYWORDS.search(question_text))
+
+    if is_counting:
         meta_json = json.dumps(doc_metadata, indent=2)
-        parts.append(f"DOCUMENT INDEX (all files in corpus):\n{meta_json}")
+        parts = [
+            f"DOCUMENT INDEX (complete list of ALL {len(doc_metadata)} files in the corpus — "
+            f"use this for counting/listing):\n{meta_json}",
+            f"CONTEXT:\n{context}",
+        ]
+    else:
+        parts = [f"CONTEXT:\n{context}"]
 
     parts.append(f"QUESTION:\n{question_text}")
     return "\n\n".join(parts)
@@ -76,6 +92,13 @@ async def run_inference(
         context = reranked.get(q.id, {}).get("context", "")
         user_prompt = _build_user_prompt(q.text, context, doc_metadata)
 
+        logger.debug(
+            f"\n{'='*80}\n"
+            f"PROMPT FOR {q.id}: {q.text}\n"
+            f"{'='*80}\n"
+            f"{user_prompt}\n"
+            f"{'='*80}"
+        )
         try:
             resp = await client.chat.completions.create(
                 model=settings.llm_model,
