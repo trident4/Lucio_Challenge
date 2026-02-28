@@ -66,5 +66,50 @@
         {"type": "contains_any", "values": ["Target Exemption", "threshold", "below"], "label": "Mentions threshold/exemption reasoning"}
       ]
     }
+  ],
+  "battle_test_questions": [
+    {
+      "id": "b1",
+      "text": "What was the percentage increase in Meta's total revenue from Q2 2024 to Q3 2024, and what were the exact revenue figures for both quarters?",
+      "assertions": [
+        {"type": "contains", "value": "39.1", "label": "Q2 Revenue is 39.1B"},
+        {"type": "contains_any", "values": ["40.3", "40.6"], "label": "Q3 Revenue is 40.3B or 40.6B"},
+        {"type": "contains_any", "values": ["3.07", "10.5", "10.", "3."], "label": "Attempts Q/Q calculation vs YoY"}
+      ]
+    },
+    {
+      "id": "b2",
+      "text": "What was the gross margin for Apple Inc. in Q1 2025?",
+      "assertions": [
+        {"type": "contains_any", "values": ["not available", "not provided", "not exist"], "label": "Correctly states information is missing (No hallucination)"}
+      ]
+    },
+    {
+      "id": "b3",
+      "text": "In the Bell Atlantic Corp. v. Twombly case, what was the primary legal standard established for pleading a Sherman Act Section 1 violation?",
+      "assertions": [
+        {"type": "contains_any", "values": ["plausib", "Plausib"], "label": "Mentions the 'Plausibility' standard"},
+        {"type": "contains", "value": "discovery", "label": "Mentions reasonable expectation of discovery"},
+        {"type": "contains_any", "values": ["Conley", "no set of facts"], "label": "Mentions retiring the Conley 'no set of facts' standard"}
+      ]
+    },
+    {
+      "id": "b4",
+      "text": "In the NVCA Investors’ Rights Agreement, what specific actions are listed under the 'Covenants of the Company' section that require the approval of the Major Investors?",
+      "assertions": [
+        {"type": "contains_any", "values": ["5.5", "Investor Director", "Preferred Stock"], "label": "Identifies Section 5.5 or Investor Director Approval"},
+        {"type": "contains_any", "values": ["change of control", "merger", "assets"], "label": "Lists specific M&A restructuring restrictions"}
+      ]
+    },
+    {
+      "id": "b5",
+      "text": "How many Meta earnings call transcripts are included in the provided documents, and which specific quarters do they cover?",
+      "assertions": [
+        {"type": "contains_any", "values": ["Three", "three", "3"], "label": "Correctly counts 3 transcripts"},
+        {"type": "contains", "value": "2025", "label": "Mentions Q1 2025"},
+        {"type": "contains", "value": "Q2", "label": "Mentions Q2 2024"},
+        {"type": "contains", "value": "Q3", "label": "Mentions Q3 2024"}
+      ]
+    }
   ]
 }

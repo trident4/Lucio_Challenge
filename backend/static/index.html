@@ -179,6 +179,36 @@
           question: "If Pristine were to acquire an indian company that had turnover of 1Cr and no assets, would it have to notify the deal to the CCI?",
           expected: "No notification required (thresholds not met)",
         },
+        {
+          id: "b1",
+          label: "Battle Test 1 - Math & Multi-Doc",
+          question: "What was the percentage increase in Meta's total revenue from Q2 2024 to Q3 2024, and what were the exact revenue figures for both quarters?",
+          expected: "Q2 2024: $39.1B\nQ3 2024: $40.6B\nIncrease: ~3.07% ($1.5B)",
+        },
+        {
+          id: "b2",
+          label: "Battle Test 2 - Negative Retrieval",
+          question: "What was the gross margin for Apple Inc. in Q1 2025?",
+          expected: "This information is not available in the provided documents.",
+        },
+        {
+          id: "b3",
+          label: "Battle Test 3 - Legal Extraction",
+          question: "In the Bell Atlantic Corp. v. Twombly case, what was the primary legal standard established for pleading a Sherman Act Section 1 violation?",
+          expected: "The complaint must allege facts that state a claim to relief that is 'plausible on its face,' retiring the old 'no set of facts' Conley standard.",
+        },
+        {
+          id: "b4",
+          label: "Battle Test 4 - Template Parsing",
+          question: "In the NVCA Investors’ Rights Agreement, what specific actions are listed under the 'Covenants of the Company' section that require the approval of the Major Investors?",
+          expected: "Matters under Section 5.5, including change of control, mergers, selling assets, or amending the Certificate of Incorporation.",
+        },
+        {
+          id: "b5",
+          label: "Battle Test 5 - Metadata Counting",
+          question: "How many Meta earnings call transcripts are included in the provided documents, and which specific quarters do they cover?",
+          expected: "Three transcripts: Q2 2024, Q3 2024, and Q1 2025.",
+        }
       ];
 
       // --- INIT ---

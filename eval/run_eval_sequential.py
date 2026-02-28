@@ -73,7 +73,7 @@ def run_eval_sequential(api_url: str, corpus_url: str) -> dict:
     start_time_global = time.perf_counter()
     all_answers = {}
 
-    for q in gt["questions"]:
+    for q in gt["battle_test_questions"]:
         q_id = q["id"]
 
         payload = {
@@ -245,7 +245,7 @@ def run_eval_sequential(api_url: str, corpus_url: str) -> dict:
     # Add raw answers for debugging
     lines.append("## Raw Answers")
     lines.append("")
-    for q in gt["questions"]:
+    for q in gt["battle_test_questions"]:
         q_id = q["id"]
         result = all_answers.get(q_id)
         if result:
