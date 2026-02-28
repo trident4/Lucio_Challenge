@@ -36,9 +36,7 @@ def rerank_all(
     Returns:
         Dict mapping question_id -> {context, sources}
     """
-    # Build global chunk lookup for neighbor context
-    # Maps (filename, chunk_index) -> content
-    all_chunks_by_file = _build_chunk_index(search_results)
+    # We will build the chunk index per-question to prevent cross-contamination
 
     result = {}
 
@@ -53,6 +51,10 @@ def rerank_all(
         if not valid_hits:
             result[q_id] = {"context": "", "sources": []}
             continue
+
+        # Build local chunk lookup ONLY for the chunks retrieved by THIS question
+        # This prevents Q7 from accidentally importing Q6's retrieved neighbors.
+        local_chunks_by_file = _build_chunk_index(valid_hits)
 
         # ── BM25 ranking (already sorted by Tantivy score) ──
         bm25_rank = {h["chunk_id"]: i for i, h in enumerate(valid_hits)}
@@ -95,7 +97,7 @@ def rerank_all(
 
         for filename in seen_files:
             header_key = (filename, 0)
-            header_content = all_chunks_by_file.get(header_key)
+            header_content = local_chunks_by_file.get(header_key)
             # Only add if chunk_0 exists and isn't already in top chunks
             header_cid = f"{filename}::chunk_0"
             if header_content and header_cid not in top_ids:
@@ -124,7 +126,7 @@ def rerank_all(
 
             parts = []
             # Previous chunk (context_before)
-            prev_content = all_chunks_by_file.get((filename, chunk_idx - 1))
+            prev_content = local_chunks_by_file.get((filename, chunk_idx - 1))
             if prev_content:
                 parts.append(prev_content)
 
@@ -132,7 +134,7 @@ def rerank_all(
             parts.append(c["content"])
 
             # Next chunk (context_after)
-            next_content = all_chunks_by_file.get((filename, chunk_idx + 1))
+            next_content = local_chunks_by_file.get((filename, chunk_idx + 1))
             if next_content:
                 parts.append(next_content)
 
@@ -153,20 +155,19 @@ def rerank_all(
 
 
 def _build_chunk_index(
-    search_results: dict[str, list[dict]],
+    question_hits: list[dict],
 ) -> dict[tuple[str, int], str]:
-    """Build (filename, chunk_index) -> content lookup from all search results.
+    """Build (filename, chunk_index) -> content lookup from a specific question's search results.
 
     This gives us access to neighboring chunks for context enrichment,
-    even if they weren't in the top reranked set.
+    strictly limited to the pool of chunks retrieved for THIS SPECIFIC QUESTION.
     """
     index = {}
-    for hits in search_results.values():
-        for h in hits:
-            chunk_idx = _extract_chunk_index(h["chunk_id"])
-            key = (h["filename"], chunk_idx)
-            if key not in index:
-                index[key] = h["content"]
+    for h in question_hits:
+        chunk_idx = _extract_chunk_index(h["chunk_id"])
+        key = (h["filename"], chunk_idx)
+        if key not in index:
+            index[key] = h["content"]
     return index
 
 

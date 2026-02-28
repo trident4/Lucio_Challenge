@@ -10,6 +10,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
 
 from app.assembly.assembler import assemble_response
@@ -24,6 +25,7 @@ from app.search.indexer import build_index
 from app.search.retriever import search_all
 from app.state import doc_metadata, vector_cache
 
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("lucio")
 
 
@@ -77,6 +79,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Lucio Speedrun", lifespan=lifespan)
 
+# Mount the static directory for the testing UI at /ui/
+app.mount("/ui", StaticFiles(directory="static", html=True), name="static")
 
 # ── The Endpoint ────────────────────────────────────────────────────────────
 
