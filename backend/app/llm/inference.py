@@ -28,9 +28,9 @@ SYSTEM_PROMPT = (
     '4. If the answer is not in the context, say: "This information is not '
     'available in the provided documents."\n'
     "5. Never guess or fill gaps with assumptions.\n"
-    "6. EXTREMELY IMPORTANT: You MUST cite your sources inline for every fact you state. "
-    "Every context block is labeled with its source file. "
-    "Append the source to the end of your sentence like this: [Source: exact filename.pdf]"
+    # "6. EXTREMELY IMPORTANT: You MUST cite your sources inline for every fact you state. "
+    # "Every context block is labeled with its source file. "
+    # "Append the source to the end of your sentence like this: [Source: exact filename.pdf]"
 )
 
 # Heuristic: questions matching these patterns likely need the full
@@ -94,14 +94,6 @@ async def run_inference(
     async def _ask(q) -> tuple[str, str]:
         context = reranked.get(q.id, {}).get("context", "")
         user_prompt = _build_user_prompt(q.text, context, doc_metadata)
-
-        logger.debug(
-            f"\n{'='*80}\n"
-            f"PROMPT FOR {q.id}: {q.text}\n"
-            f"{'='*80}\n"
-            f"{user_prompt}\n"
-            f"{'='*80}"
-        )
         try:
             resp = await client.chat.completions.create(
                 model=settings.llm_model,

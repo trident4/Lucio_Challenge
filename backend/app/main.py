@@ -25,9 +25,8 @@ from app.search.indexer import build_index
 from app.search.retriever import search_all
 from app.state import doc_metadata, vector_cache
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("lucio")
-
 
 # ── Timing helper ───────────────────────────────────────────────────────────
 
