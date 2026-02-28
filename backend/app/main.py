@@ -92,7 +92,7 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     t = [time.perf_counter()]
 
     # ── Phase 1: Fetch + Extract ────────────────────────────────────────
-    vector_cache.clear()  # Prevent stale data from prior requests
+    # vector_cache.clear()  # Removed to enforce persistent global caching
     doc_metadata.clear()
 
     zip_bytes = await fetch_corpus(req.corpus_url)
