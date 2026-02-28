@@ -70,11 +70,11 @@
   "battle_test_questions": [
     {
       "id": "b1",
-      "text": "What was the percentage increase in Meta's total revenue from Q2 2024 to Q3 2024, and what were the exact revenue figures for both quarters?",
+      "text": "What was the Year-Over-Year (YoY) percentage increase in Meta's total revenue for Q3 2024, and what were the exact revenue figures for both Q2 and Q3?",
       "assertions": [
         {"type": "contains", "value": "39.1", "label": "Q2 Revenue is 39.1B"},
         {"type": "contains_any", "values": ["40.3", "40.6"], "label": "Q3 Revenue is 40.3B or 40.6B"},
-        {"type": "contains_any", "values": ["3.07", "10.5", "10.", "3."], "label": "Attempts Q/Q calculation vs YoY"}
+        {"type": "contains", "value": "19", "label": "Extracts 19% Year-over-Year growth"}
       ]
     },
     {
