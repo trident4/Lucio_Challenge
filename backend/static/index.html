@@ -73,15 +73,18 @@
 
         <div class="flex gap-4 items-end">
           <div class="flex-1">
-            <label class="block text-sm font-medium text-gray-400 mb-1"
-              >Select Question</label
-            >
-            <select
-              id="questionSelect"
-              class="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
+            <div class="flex justify-between items-center mb-1">
+              <label class="block text-sm font-medium text-gray-400"
+                >Select Questions</label
+              >
+              <button onclick="toggleSelectAll()" id="selectAllBtn" class="text-xs text-blue-400 hover:text-blue-300">Select All</button>
+            </div>
+            <div
+              id="questionCheckboxes"
+              class="w-full max-h-48 overflow-y-auto bg-gray-900 border border-gray-600 rounded-lg p-2 space-y-1"
             >
               <!-- Populated by JS -->
-            </select>
+            </div>
           </div>
           <button
             id="runBtn"
@@ -212,18 +215,28 @@
       ];
 
       // --- INIT ---
-      const select = document.getElementById("questionSelect");
-      const optAll = document.createElement("option");
-      optAll.value = "all";
-      optAll.textContent = "⚡ Run All Questions (Batch Mode)";
-      select.appendChild(optAll);
+      const checkboxContainer = document.getElementById("questionCheckboxes");
 
       TEST_DATA.forEach((task) => {
-        const opt = document.createElement("option");
-        opt.value = task.id;
-        opt.textContent = task.label;
-        select.appendChild(opt);
+        const label = document.createElement("label");
+        label.className = "flex items-start gap-3 cursor-pointer p-2 rounded hover:bg-gray-800 transition-colors";
+        label.innerHTML = `
+          <input type="checkbox" value="${task.id}" class="mt-1 w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900 focus:ring-2 cursor-pointer">
+          <div class="flex flex-col">
+            <span class="text-sm font-medium text-gray-200">${task.label}</span>
+            <span class="text-xs text-gray-500 line-clamp-1 italic">${task.question}</span>
+          </div>
+        `;
+        checkboxContainer.appendChild(label);
       });
+
+      let allSelected = false;
+      function toggleSelectAll() {
+        allSelected = !allSelected;
+        const checkboxes = checkboxContainer.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(cb => cb.checked = allSelected);
+        document.getElementById("selectAllBtn").textContent = allSelected ? "Deselect All" : "Select All";
+      }
 
       let timerInterval;
       let startTime;
@@ -265,7 +278,16 @@
       // --- CORE LOGIC ---
       async function runInference() {
         const btn = document.getElementById("runBtn");
-        const selection = select.value;
+        
+        // Get Selected Questions from Checkboxes
+        const checkboxes = document.querySelectorAll('#questionCheckboxes input[type="checkbox"]:checked');
+        const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+        
+        if (selectedIds.length === 0) {
+          alert("Please select at least one question to run.");
+          return;
+        }
+
         const corpusUrl = document.getElementById("corpusUrl").value;
         const resultsContainer = document.getElementById("resultsContainer");
 
@@ -277,12 +299,7 @@
         resultsContainer.innerHTML = "";
 
         // Build Payload
-        let questionsToRun = [];
-        if (selection === "all") {
-          questionsToRun = TEST_DATA;
-        } else {
-          questionsToRun = TEST_DATA.filter((t) => t.id === selection);
-        }
+        const questionsToRun = TEST_DATA.filter((t) => selectedIds.includes(t.id));
 
         // Render Cards
         questionsToRun.forEach(q => {

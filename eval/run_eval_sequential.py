@@ -73,7 +73,7 @@ def run_eval_sequential(api_url: str, corpus_url: str) -> dict:
     start_time_global = time.perf_counter()
     all_answers = {}
 
-    for q in gt["battle_test_questions"]:
+    for q in gt["questions"]:
         q_id = q["id"]
 
         payload = {
