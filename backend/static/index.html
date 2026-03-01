@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lucio Speedrun - Testing UI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              gray: {
+                900: "#111827",
+                800: "#1f2937",
+                700: "#374151",
+                100: "#f3f4f6",
+              },
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      /* Custom markdown styles since Tailwind resets them */
+      .markdown-body h1 { font-size: 1.5em; font-weight: bold; margin-bottom: 0.5em; }
+      .markdown-body h2 { font-size: 1.25em; font-weight: bold; margin-bottom: 0.5em; margin-top: 1em; }
+      .markdown-body p { margin-bottom: 1em; }
+      .markdown-body ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 1em; }
+      .markdown-body ol { list-style-type: decimal; padding-left: 1.5em; margin-bottom: 1em; }
+      .markdown-body strong { font-weight: bold; color: #60a5fa; } /* blue-400 */
+    </style>
+  </head>
+  <body class="bg-gray-900 text-gray-100 min-h-screen font-sans p-6">
+    <div class="max-w-6xl mx-auto space-y-6">
+      <!-- Header -->
+      <header
+        class="flex items-center justify-between border-b border-gray-800 pb-4"
+      >
+        <div>
+          <h1 class="text-2xl font-bold text-white tracking-tight">
+            Lucio Speedrun
+          </h1>
+          <p class="text-gray-400 text-sm mt-1">
+            Evaluation & Comparison Dashboard
+          </p>
+        </div>
+        <div
+          id="statusBadge"
+          class="hidden px-3 py-1 rounded-full text-sm font-medium bg-blue-900/50 text-blue-400 border border-blue-800"
+        >
+          Ready
+        </div>
+      </header>
+
+      <!-- Controls -->
+      <div
+        class="bg-gray-800 rounded-xl p-5 border border-gray-700 shadow-lg space-y-4"
+      >
+        <div>
+          <label class="block text-sm font-medium text-gray-400 mb-1"
+            >Corpus URL (ZIP)</label
+          >
+          <input
+            type="text"
+            id="corpusUrl"
+            class="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
+            value="https://pub-2d7c04bede434cd0bb8ebedc0a3160bb.r2.dev/Archive.zip"
+          />
+        </div>
+
+        <div class="flex gap-4 items-end">
+          <div class="flex-1">
+            <div class="flex justify-between items-center mb-1">
+              <label class="block text-sm font-medium text-gray-400"
+                >Select Questions</label
+              >
+              <button onclick="toggleSelectAll()" id="selectAllBtn" class="text-xs text-blue-400 hover:text-blue-300">Select All</button>
+            </div>
+            <div
+              id="questionCheckboxes"
+              class="w-full max-h-48 overflow-y-auto bg-gray-900 border border-gray-600 rounded-lg p-2 space-y-1"
+            >
+              <!-- Populated by JS -->
+            </div>
+          </div>
+          <button
+            id="runBtn"
+            onclick="runInference()"
+            class="bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 px-6 rounded-lg transition-colors flex items-center gap-2"
+          >
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+              ></path>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              ></path>
+            </svg>
+            Run Inference
+          </button>
+        </div>
+      </div>
+
+      <!-- Timer -->
+      <div
+        id="timerContainer"
+        class="hidden flex items-center justify-center py-4"
+      >
+        <div class="text-4xl font-mono tracking-wider font-light text-blue-400">
+          <span id="timerDial">00.000</span
+          ><span class="text-lg text-blue-600 ml-1">s</span>
+        </div>
+      </div>
+
+      <!-- Results Area (Dynamic Grid) -->
+      <div id="resultsContainer" class="hidden flex flex-col gap-6 mt-6">
+        <!-- Results will be injected here -->
+      </div>
+    </div>
+
+
+    <!-- Application Logic -->
+    <script>
+      // --- DATA ---
+      const TEST_DATA = [
+        {
+          id: "q1",
+          label: "Q1 - Meta Revenue (3 Quarters)",
+          question: "What are the revenue figures for Meta for Q1, Q2 and Q3?",
+          expected: "Q2 2024: $39.1B\nQ3 2024: $40.6B\nQ1 2025: $42.3B",
+        },
+        {
+          id: "q2",
+          label: "Q2 - KFIN Revenue",
+          question: "What was KFIN's revenue in 2021?",
+          expected: "Rs. 4586550000",
+        },
+        {
+          id: "q3",
+          label: "Q3 - CCI Metrics",
+          question: "What metrics helped CCI determine if the combination would be anticompetitive?",
+          expected:
+            "The CCI used the Herfindahl Hirschman Index to assess market concentration",
+        },
+        {
+          id: "q4",
+          label: "Q4 - Eastman Kodak Bench",
+          question: "What was the bench in the Eastman Kodak Case?",
+          expected:
+            "BLACKMUN, REHNQUIST, WHITE, STEVENS, KENNEDY, SOUTER, SCALIA, O’CONNOR, THOMAS",
+        },
+        {
+          id: "q5",
+          label: "Q5 - List SCOTUS Cases",
+          question: "How many SCOTUS cases are in the set? Name them.",
+          expected:
+            "5 cases: Bell Atlantic, Eastman Kodak, Standard Oil, Socony-Vacuum, Brown Shoe",
+        },
+        {
+          id: "q6",
+          label: "Q6 - Governing Law (NVCA)",
+          question: "What is the governing law in the NVCA IRA?",
+          expected: "Delaware",
+        },
+        {
+          id: "q7",
+          label: "Q7 - CCI Notice Required?",
+          question: "If Pristine were to acquire an indian company that had turnover of 1Cr and no assets, would it have to notify the deal to the CCI?",
+          expected: "No notification required (thresholds not met)",
+        },
+        {
+          id: "b1",
+          label: "Battle Test 1 - Math & Multi-Doc",
+          question: "What was the Year-Over-Year (YoY) percentage increase in Meta's total revenue for Q3 2024, and what were the exact revenue figures for both Q2 and Q3?",
+          expected: "YoY Growth: 19% (for Q3)\nQ2 2024: $39.1B\nQ3 2024: $40.6B",
+        },
+        {
+          id: "b2",
+          label: "Battle Test 2 - Negative Retrieval",
+          question: "What was the gross margin for Apple Inc. in Q1 2025?",
+          expected: "This information is not available in the provided documents.",
+        },
+        {
+          id: "b3",
+          label: "Battle Test 3 - Legal Extraction",
+          question: "In the Bell Atlantic Corp. v. Twombly case, what was the primary legal standard established for pleading a Sherman Act Section 1 violation?",
+          expected: "The complaint must allege facts that state a claim to relief that is 'plausible on its face,' retiring the old 'no set of facts' Conley standard.",
+        },
+        {
+          id: "b4",
+          label: "Battle Test 4 - Template Parsing",
+          question: "In the NVCA Investors’ Rights Agreement, what specific actions are listed under the 'Covenants of the Company' section that require the approval of the Major Investors?",
+          expected: "Matters under Section 5.5, including change of control, mergers, selling assets, or amending the Certificate of Incorporation.",
+        },
+        {
+          id: "b5",
+          label: "Battle Test 5 - Metadata Counting",
+          question: "How many Meta earnings call transcripts are included in the provided documents, and which specific quarters do they cover?",
+          expected: "Three transcripts: Q2 2024, Q3 2024, and Q1 2025.",
+        }
+      ];
+
+      // --- INIT ---
+      const checkboxContainer = document.getElementById("questionCheckboxes");
+
+      TEST_DATA.forEach((task) => {
+        const label = document.createElement("label");
+        label.className = "flex items-start gap-3 cursor-pointer p-2 rounded hover:bg-gray-800 transition-colors";
+        label.innerHTML = `
+          <input type="checkbox" value="${task.id}" class="mt-1 w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900 focus:ring-2 cursor-pointer">
+          <div class="flex flex-col">
+            <span class="text-sm font-medium text-gray-200">${task.label}</span>
+            <span class="text-xs text-gray-500 line-clamp-1 italic">${task.question}</span>
+          </div>
+        `;
+        checkboxContainer.appendChild(label);
+      });
+
+      let allSelected = false;
+      function toggleSelectAll() {
+        allSelected = !allSelected;
+        const checkboxes = checkboxContainer.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(cb => cb.checked = allSelected);
+        document.getElementById("selectAllBtn").textContent = allSelected ? "Deselect All" : "Select All";
+      }
+
+      let timerInterval;
+      let startTime;
+
+      function createResultCard(qId, title, expectedText) {
+        return `
+          <div id="card-${qId}" class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start border border-gray-700 rounded-xl p-4 bg-gray-850 relative">
+            <div class="absolute -top-3 left-4 bg-blue-900 text-blue-100 text-xs font-bold px-2 py-1 rounded shadow-lg border border-blue-700 uppercase tracking-wide">
+              ${title}
+            </div>
+            
+            <div class="flex flex-col h-full mt-4">
+              <div class="px-4 py-2 border-b border-gray-700 flex justify-between items-center bg-gray-800 rounded-t-lg">
+                <h3 class="font-semibold text-gray-200 text-sm">🚀 Lucio Output</h3>
+                <span id="badge-${qId}" class="hidden px-2 py-1 rounded text-xs font-medium">Processing</span>
+              </div>
+              <div class="p-4 bg-gray-800 flex-1 prose prose-sm prose-invert max-w-none">
+                <div id="ans-${qId}" class="text-gray-300 leading-relaxed"><span class="animate-pulse text-gray-500">Thinking...</span></div>
+              </div>
+              <div class="p-3 bg-gray-900 border-t border-gray-700 rounded-b-lg">
+                <h4 class="text-xs text-gray-500 uppercase tracking-wider mb-2">Sources</h4>
+                <div id="src-${qId}" class="space-y-1 text-xs"></div>
+              </div>
+            </div>
+
+            <div class="flex flex-col h-full mt-4">
+              <div class="px-4 py-2 border-b border-gray-700 flex justify-between items-center bg-gray-800 rounded-t-lg">
+                <h3 class="font-semibold text-gray-200 text-sm">🎯 Ground Truth</h3>
+                <span class="text-xs text-green-500 font-mono">Testing Set.xlsx</span>
+              </div>
+              <div class="p-4 bg-gray-800 flex-1 rounded-b-lg">
+                <div class="whitespace-pre-wrap text-green-400 font-medium text-sm leading-relaxed">${expectedText}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // --- CORE LOGIC ---
+      async function runInference() {
+        const btn = document.getElementById("runBtn");
+        
+        // Get Selected Questions from Checkboxes
+        const checkboxes = document.querySelectorAll('#questionCheckboxes input[type="checkbox"]:checked');
+        const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+        
+        if (selectedIds.length === 0) {
+          alert("Please select at least one question to run.");
+          return;
+        }
+
+        const corpusUrl = document.getElementById("corpusUrl").value;
+        const resultsContainer = document.getElementById("resultsContainer");
+
+        // UI State: Reset
+        btn.disabled = true;
+        btn.classList.add("opacity-50", "cursor-not-allowed");
+        resultsContainer.classList.remove("hidden");
+        document.getElementById("timerContainer").classList.remove("hidden");
+        resultsContainer.innerHTML = "";
+
+        // Build Payload
+        const questionsToRun = TEST_DATA.filter((t) => selectedIds.includes(t.id));
+
+        // Render Cards
+        questionsToRun.forEach(q => {
+          resultsContainer.innerHTML += createResultCard(q.id, q.label, q.expected);
+        });
+
+        const reqQuestions = questionsToRun.map(q => ({ id: q.id, text: q.question }));
+
+        // Timer start
+        startTime = performance.now();
+        timerInterval = setInterval(() => {
+          const elapsed = (performance.now() - startTime) / 1000;
+          document.getElementById("timerDial").textContent = elapsed
+            .toFixed(3)
+            .padStart(6, "0");
+        }, 50);
+
+        try {
+          // Execute API Call
+          const response = await fetch("/challenge/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              corpus_url: corpusUrl,
+              questions: reqQuestions,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(`API Error ${response.status}: ${JSON.stringify(data)}`);
+          }
+
+          // Stop Timer
+          clearInterval(timerInterval);
+          const finalTime = (performance.now() - startTime) / 1000;
+          document.getElementById("timerDial").textContent = finalTime.toFixed(3);
+
+          // Render Results
+          data.results.forEach(res => {
+            const qId = res.question_id;
+            
+            // Answer
+            document.getElementById(`ans-${qId}`).innerHTML = marked.parse(res.answer);
+
+            // Sources
+            const sourcesHtml = res.sources
+              .map(
+                (src) => `
+                    <div class="flex items-center gap-2 bg-gray-900 border border-gray-700 px-2 py-1 rounded">
+                        <span class="text-gray-300 truncate w-32 md:w-48" title="${src.filename}">${src.filename}</span>
+                        <div class="ml-auto flex gap-1">${src.pages.map((p) => `<span class="bg-gray-700 text-gray-300 px-1 rounded">p.${p}</span>`).join("")}</div>
+                    </div>`
+              )
+              .join("");
+            document.getElementById(`src-${qId}`).innerHTML = sourcesHtml;
+
+            // Success Badge
+            const badge = document.getElementById(`badge-${qId}`);
+            badge.classList.remove("hidden");
+            badge.textContent = "Success";
+            badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-green-900/50 text-green-400 border border-green-800 uppercase tracking-wide";
+          });
+
+        } catch (error) {
+          clearInterval(timerInterval);
+          questionsToRun.forEach(q => {
+             document.getElementById(`ans-${q.id}`).innerHTML = `<span class="text-red-400 font-medium">Error: ${error.message}</span>`;
+             const badge = document.getElementById(`badge-${q.id}`);
+             badge.classList.remove("hidden");
+             badge.textContent = "Failed";
+             badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-red-900/50 text-red-400 border border-red-800 uppercase tracking-wide";
+          });
+        } finally {
+          btn.disabled = false;
+          btn.classList.remove("opacity-50", "cursor-not-allowed");
+        }
+      }
+    </script>
+  </body>
+</html>

@@ -1,5 +1,6 @@
 """Application settings loaded from environment variables."""
 
+import logging
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 

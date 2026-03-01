@@ -10,6 +10,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
 
 from app.assembly.assembler import assemble_response
@@ -24,8 +25,8 @@ from app.search.indexer import build_index
 from app.search.retriever import search_all
 from app.state import doc_metadata, vector_cache
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("lucio")
-
 
 # ── Timing helper ───────────────────────────────────────────────────────────
 
@@ -77,6 +78,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Lucio Speedrun", lifespan=lifespan)
 
+# Mount the static directory for the testing UI at /ui/
+app.mount("/ui", StaticFiles(directory="static", html=True), name="static")
 
 # ── The Endpoint ────────────────────────────────────────────────────────────
 
@@ -89,7 +92,7 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     t = [time.perf_counter()]
 
     # ── Phase 1: Fetch + Extract ────────────────────────────────────────
-    vector_cache.clear()  # Prevent stale data from prior requests
+    # vector_cache.clear()  # Removed to enforce persistent global caching
     doc_metadata.clear()
 
     zip_bytes = await fetch_corpus(req.corpus_url)
