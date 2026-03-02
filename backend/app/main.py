@@ -20,6 +20,7 @@ from app.extraction.fetcher import fetch_corpus, unzip_to_tuples
 from app.extraction.workers import run_extraction
 from app.llm.inference import run_inference
 from app.reranker.reranker import rerank_all
+from app.reranker.compressor import compress_context
 from app.schemas import ChallengeRequest, ChallengeResponse
 from app.search.indexer import build_index
 from app.search.retriever import search_all
@@ -118,9 +119,13 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     )
     log_phase("Phase 4: Rerank", t)
 
+    # ── Phase 4.5: Compress ─────────────────────────────────────────────
+    compressed = await compress_context(client, q_vectors, reranked, settings)
+    log_phase("Phase 4.5: Compress", t)
+
     # ── Phase 5: LLM Inference ──────────────────────────────────────────
     llm_answers = await run_inference(
-        client, req.questions, reranked, doc_metadata, settings
+        client, req.questions, compressed, doc_metadata, settings
     )
     log_phase("Phase 5: LLM", t)
 
