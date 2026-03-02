@@ -24,7 +24,7 @@ from app.reranker.compressor import compress_context
 from app.schemas import ChallengeRequest, ChallengeResponse
 from app.search.indexer import build_index
 from app.search.retriever import search_all
-from app.state import doc_metadata, vector_cache
+from app.state import vector_cache, corpus_cache, corpus_lock
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("lucio")
@@ -92,20 +92,32 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     settings: Settings = request.app.state.settings
     t = [time.perf_counter()]
 
-    # ── Phase 1: Fetch + Extract ────────────────────────────────────────
-    # vector_cache.clear()  # Removed to enforce persistent global caching
-    doc_metadata.clear()
+    # ── Phase 1 & 2: Fetch, Extract, Index ─────────────────────────────
+    # Lock globally to prevent 15 simultaneous 100MB downloads
+    async with corpus_lock:
+        if req.corpus_url in corpus_cache:
+            cache_entry = corpus_cache[req.corpus_url]
+            chunks = cache_entry["chunks"]
+            metadata = cache_entry["metadata"]
+            index = cache_entry["index"]
+            log_phase("Phase 1+2: Cached Index", t)
+        else:
+            zip_bytes = await fetch_corpus(req.corpus_url)
+            file_tuples = unzip_to_tuples(zip_bytes)
+            loop = asyncio.get_event_loop()
+            chunks, metadata = await loop.run_in_executor(
+                None, run_extraction, file_tuples
+            )
+            log_phase("Phase 1: Extract", t)
 
-    zip_bytes = await fetch_corpus(req.corpus_url)
-    file_tuples = unzip_to_tuples(zip_bytes)
-    loop = asyncio.get_event_loop()
-    chunks, metadata = await loop.run_in_executor(None, run_extraction, file_tuples)
-    doc_metadata.extend(metadata)
-    log_phase("Phase 1: Extract", t)
+            index = build_index(chunks)
+            log_phase("Phase 2: Index", t)
 
-    # ── Phase 2: Tantivy Index ──────────────────────────────────────────
-    index = build_index(chunks)
-    log_phase("Phase 2: Index", t)
+            corpus_cache[req.corpus_url] = {
+                "chunks": chunks,
+                "metadata": metadata,
+                "index": index,
+            }
 
     # ── Phase 3: Retrieve + Embed ───────────────────────────────────────
     search_results = await search_all(index, req.questions, settings.bm25_top_k)
@@ -115,17 +127,17 @@ async def challenge_run(req: ChallengeRequest, request: Request):
 
     # ── Phase 4: Rerank ─────────────────────────────────────────────────
     reranked = rerank_all(
-        q_vectors, search_results, vector_cache, settings.rerank_top_k
+        req.questions, q_vectors, search_results, vector_cache, settings.rerank_top_k
     )
     log_phase("Phase 4: Rerank", t)
 
-    # ── Phase 4.5: Compress ─────────────────────────────────────────────
-    compressed = await compress_context(client, q_vectors, reranked, settings)
-    log_phase("Phase 4.5: Compress", t)
+    # ── Phase 4.5: Compress (BYPASSED) ──────────────────────────────────
+    compressed = reranked
+    log_phase("Phase 4.5: Compress (Bypassed)", t)
 
     # ── Phase 5: LLM Inference ──────────────────────────────────────────
     llm_answers = await run_inference(
-        client, req.questions, compressed, doc_metadata, settings
+        client, req.questions, compressed, metadata, settings
     )
     log_phase("Phase 5: LLM", t)
 
