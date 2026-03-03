@@ -135,8 +135,8 @@ async def compress_context(
     q_vectors: dict[str, np.ndarray],
     reranked: dict[str, dict],
     settings: Settings,
-    top_n_sentences: int = 40,
-    padding: int = 2,
+    top_n_sentences: int = 60,
+    padding: int = 4,
 ) -> dict[str, dict]:
     """
     Compresses the massive chunk context into dense, padded sentence blocks

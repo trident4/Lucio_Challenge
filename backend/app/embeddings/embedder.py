@@ -15,6 +15,7 @@ import numpy as np
 from openai import AsyncOpenAI
 
 from app.config import Settings
+from app.state import embedding_lock
 
 logger = logging.getLogger("lucio.embedder")
 
@@ -97,33 +98,34 @@ async def embed_and_cache(
     """
     # Build content lookup from all search results (deduplicates naturally)
     # Use 'content' (raw text) for embedding, not 'text' (enriched with metadata)
-    content_lookup: dict[str, str] = {}
-    for hits in search_results.values():
-        for h in hits:
-            content_lookup[h["chunk_id"]] = h["content"]
+    async with embedding_lock:
+        content_lookup: dict[str, str] = {}
+        for hits in search_results.values():
+            for h in hits:
+                content_lookup[h["chunk_id"]] = h["content"]
 
-    # Find cache misses
-    missing = [cid for cid in content_lookup if cid not in vector_cache]
-    if not missing:
-        logger.info("All chunks already cached — skipping embedding")
-        return
+        # Find cache misses
+        missing = [cid for cid in content_lookup if cid not in vector_cache]
+        if not missing:
+            logger.info("All chunks already cached — skipping embedding")
+            return
 
-    logger.info(
-        f"Embedding {len(missing)} uncached chunks in batches of {settings.embedding_batch_size}"
-    )
+        logger.info(
+            f"Embedding {len(missing)} uncached chunks in batches of {settings.embedding_batch_size}"
+        )
 
-    # Batch embed with truncation
-    for i in range(0, len(missing), settings.embedding_batch_size):
-        batch_ids = missing[i : i + settings.embedding_batch_size]
-        batch_texts = [
-            _prepare_for_embedding(f"search_document: {content_lookup[cid]}")
-            for cid in batch_ids
-        ]
-        vectors = await embed_batch(client, batch_texts, settings)
-        for cid, vec in zip(batch_ids, vectors):
-            vector_cache[cid] = vec
+        # Batch embed with truncation
+        for i in range(0, len(missing), settings.embedding_batch_size):
+            batch_ids = missing[i : i + settings.embedding_batch_size]
+            batch_texts = [
+                _prepare_for_embedding(f"search_document: {content_lookup[cid]}")
+                for cid in batch_ids
+            ]
+            vectors = await embed_batch(client, batch_texts, settings)
+            for cid, vec in zip(batch_ids, vectors):
+                vector_cache[cid] = vec
 
-    logger.info(f"Cached {len(missing)} new chunk vectors")
+        logger.info(f"Cached {len(missing)} new chunk vectors")
 
 
 async def embed_questions(
@@ -141,8 +143,9 @@ async def embed_questions(
     Returns:
         Dict mapping question_id -> 256d numpy vector.
     """
-    texts = [f"search_query: {q.text}" for q in questions]
-    vectors = await embed_batch(client, texts, settings)
-    result = {q.id: v for q, v in zip(questions, vectors)}
-    logger.info(f"Embedded {len(questions)} question vectors")
-    return result
+    async with embedding_lock:
+        texts = [f"search_query: {q.text}" for q in questions]
+        vectors = await embed_batch(client, texts, settings)
+        result = {q.id: v for q, v in zip(questions, vectors)}
+        logger.info(f"Embedded {len(questions)} question vectors")
+        return result

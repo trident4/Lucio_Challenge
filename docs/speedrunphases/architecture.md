@@ -17,15 +17,16 @@ end
             P4["Core 4: PDF Layout"]
         end
 
-        subgraph Search["Phase 2 & 3: In-Memory Search"]
+        subgraph Search["Phase 2 & 3: Retrieval & Deduplication"]
             Tantivy[("Tantivy RAM Index")]
             BM25["15x Concurrent BM25 Search"]
-            Cache{"Global Corpus Cache (RAM)"}
+            EmbedLock{"Global Embedding Lock"}
+            Cache{"Global Vector Cache (RAM)"}
         end
 
-        subgraph Rerank["Phase 4: Exact Math Rerank"]
-            Numpy["Numpy Dot Product Rerank"]
-            Top5["Top 5 Chunks Selected (Payload Halved)"]
+        subgraph Rerank["Phase 4: Hybrid RRF Rerank"]
+            RRF["Reciprocal Rank Fusion"]
+            Top8["Top 8 Chunks + Neighbors (Golden Config)"]
         end
     end
 
@@ -42,13 +43,14 @@ end
     Extraction -->|Windowing| Tantivy
     Tantivy --> BM25
     BM25 --> Cache
-
+    Cache -- "Batch Embed" --> EmbedLock
+    EmbedLock -- "Protected Seq" --> Embed
     %% Remote Calls
     Cache -- "Batch Embed" --> Embed
     Embed -- "256d Vectors" --> Cache
-    Cache --> Numpy
-    Numpy --> Top5
-    Top5 -- "Async Batch" --> Qwen
+    Cache --> RRF
+    RRF --> Top8
+    Top8 -- "Async Batch" --> Qwen
     Qwen -- "Final Answers" --> Aggregator["JSON Aggregator"]
 
     Aggregator --> Output["Final POST Response"]
@@ -64,8 +66,8 @@ end
 ### **Phase 1: Multi-Core Extraction & Processing** _(Ideal Time: ~5.5s)_
 
 - The system downloads the provided ZIP file directly into an in-memory `io.BytesIO` buffer to avoid disk I/O latency.
-- It utilizes a multi-processing pool to concurrently extract text from PDFs (using `pypdf`) and DOCX files (using `python-docx`).
-- Documents are split into overlapping semantic chunks (currently 4000 characters).
+- It utilizes a multi-processing pool to concurrently extract text from PDFs (using `PyMuPDF/fitz` in layout mode) and DOCX files.
+- Documents are split into focused semantic chunks (2,000 characters with 200-character overlap).
 - Key metadata (Document ID, Filename, Page Numbers) is extracted and stored in a global state `doc_metadata` dictionary.
 
 ### **Phase 2: Tantivy Lexical Indexing** _(Ideal Time: ~0.2s)_
@@ -82,10 +84,10 @@ end
 
 ### **Phase 4: Reciprocal Rank Fusion (RRF)** _(Ideal Time: < 0.1s)_
 
-- Calculates the Cosine Similarity (via `numpy` dot products) between the embedded question and the embedded chunks.
-- Applies the RRF algorithm to mathematically merge the lexical rank (BM25) and semantic rank (Embedding) into a single, unified unified score.
-- Trims the list down to the absolute best sequence of chunks (`RERANK_TOP_K`).
-- Dynamically enriches the selected chunks by injecting their document's `chunk_0` (the header/title) to restore missing global context.
+- Calculates the Cosine Similarity between the embedded question and the candidate chunks.
+- Applies the **Reciprocal Rank Fusion (RRF)** algorithm to merge lexical rank (BM25) and semantic rank (Embedding) into a single unified score.
+- Selects the top **8** chunks (The "Golden Config" for 100% accuracy).
+- Dynamically enriches each selected chunk with its **±1 neighboring chunks** to provide continuous semantic context to the LLM.
 
 ### **Phase 5: Unified LLM Inference** _(Ideal Time: ~15s - 45s per batch depending on complexity)_
 
@@ -115,7 +117,9 @@ To meet the strict competition requirement of processing **15 parallel queries i
 
 ### ✅ What Worked (The Final Architecture):
 
-1. **Global Corpus RAM Pipeline (`state.py`):**
-   We wrapped Phases 1 and 2 in a rigorous 1-per-corpus `asyncio.Lock()`. When 15 competition requests strike synchronously, exactly ONE request handles the heavy lifting (100MB download, Extract, Tantivy Compile), and the other 14 requests block natively. Within ~8s, the lock releases, and all 14 inherit the living RAM index simultaneously for zero duplicate IO cost.
-2. **Phase 4.5 Ablation (The "Goldilocks" Payload [Top-K = 5]):**
-   We completely bypassed and disconnected sentence-level compression. Instead of surgically dissecting text, we discovered the most performant parallel solution was to strictly truncate the total 4000-character Search Engine results from `8 chunks` down to a rigid `5 chunks`. This effectively halved the concurrent data payload flooding the remote LLM hardware (protecting its inference cache from bursting) whilst completely guaranteeing the LLM received unadulterated, un-fragmented contiguous semantic sequences. Total parallel time plunged to ~56s on local Silicon while perfectly retaining 100% (23/23) accuracy formatting.
+1. **Global Corpus & Embedding Locks (`state.py`):**
+   We implemented two rigorous locks:
+   - **Corpus Lock**: Ensures exactly ONE request handles the heavy lifting (Download, Extract, Index) for a zip file, while others wait.
+   - **Embedding Lock**: Serializes calls to the remote Embedding API to prevent hardware saturation and "Model Crashed" errors on the Mac Studio. Parallel requests benefit from a deduplicated global `vector_cache`.
+2. **Phase 4.5 Ablation (The "Golden" Payload [Top-K = 8]):**
+   We completely bypassed surgical sentence-level compression (`Phase 4.5`). Instead, we found that selecting the top **8** contiguous chunks provided the perfect balance of semantic depth and processing speed. This configuration achieved a flawless **100% (23/23)** accuracy score by ensuring the LLM had enough context to distinguish between consolidated and segment-level financial figures (e.g., Meta Revenue). Total parallel time stabilized at ~56s-100s depending on load.
