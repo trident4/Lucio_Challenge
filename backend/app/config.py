@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     mac_studio_base_url: str
     mac_studio_api_key: str = "not-needed"
 
+    # OpenRouter connection (Optional overrides for LLM only)
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_api_key: str | None = None
+
     # Model names (as served on Mac Studio)
     embedding_model: str
     llm_model: str

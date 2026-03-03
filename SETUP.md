@@ -56,6 +56,11 @@ Lucio relies on an external Mac Studio for heavy neural compute (Embeddings and 
     LLM_MAX_TOKENS=500
     LLM_TEMPERATURE=0.0
     EMBEDDING_BATCH_SIZE=20
+
+    # Optional: OpenRouter Override (for LLM Inference ONLY)
+    # Leave OPENROUTER_API_KEY empty to route everything to Mac Studio
+    OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+    OPENROUTER_API_KEY=
     ```
 
 ---

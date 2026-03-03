@@ -22,6 +22,9 @@ class ChallengeRequest(BaseModel):
 
     corpus_url: str
     questions: list[Question]
+    llm_model: str | None = None  # Optional override for model benchmarking
+    rerank_top_k: int | None = None  # Optional override for context tuning
+    bypass_cache: bool = False  # Force cold start for fair benchmarking
 
 
 class Source(BaseModel):
@@ -43,6 +46,8 @@ class ChallengeResponse(BaseModel):
     """Final response body returned from POST /challenge/run."""
 
     results: list[Answer]
+    total_time: float | None = None
+    total_tokens: int | None = None
 
 
 # ── Internal Data Structures (zero-overhead TypedDicts) ─────────────────────
