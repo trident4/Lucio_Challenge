@@ -10,7 +10,8 @@ from app.search.indexer import build_index
 from app.search.retriever import search_all
 from app.embeddings.embedder import embed_and_cache, embed_questions
 from app.reranker.reranker import rerank_all
-from app.state import doc_metadata, vector_cache
+from app.state import vector_cache
+from app.reranker.compressor import compress_context
 from app.llm.inference import _build_user_prompt, SYSTEM_PROMPT
 
 
@@ -31,7 +32,7 @@ async def count_tokens():
 
     # Phases 1-4 (run quickly to get the exact context)
     vector_cache.clear()
-    doc_metadata.clear()
+    doc_metadata = []
     zip_bytes = await fetch_corpus(req.corpus_url)
     file_tuples = unzip_to_tuples(zip_bytes)
     chunks, metadata = run_extraction(file_tuples)
@@ -41,11 +42,12 @@ async def count_tokens():
     await embed_and_cache(client, search_results, vector_cache, settings)
     q_vectors = await embed_questions(client, req.questions, settings)
     reranked = rerank_all(
-        q_vectors, search_results, vector_cache, settings.rerank_top_k
+        req.questions, q_vectors, search_results, vector_cache, settings.rerank_top_k
     )
+    compressed = await compress_context(client, q_vectors, reranked, settings)
 
     # Extract the exact prompt we would send to Qwen
-    context = reranked.get("q4", {}).get("context", "")
+    context = compressed.get("q4", {}).get("context", "")
     user_prompt = _build_user_prompt(req.questions[0].text, context, doc_metadata)
 
     full_text = SYSTEM_PROMPT + "\n\n" + user_prompt

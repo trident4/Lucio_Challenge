@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # Tuning parameters
     embedding_dimensions: int = 256
     bm25_top_k: int = 150
-    rerank_top_k: int = 8
+    rerank_top_k: int = 5
     llm_max_tokens: int = 500
     llm_temperature: float = 0.0
     embedding_batch_size: int = 20

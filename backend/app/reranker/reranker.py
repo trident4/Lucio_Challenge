@@ -19,6 +19,7 @@ RRF_K = 60  # Standard RRF constant (from Cormack et al.)
 
 
 def rerank_all(
+    questions: list,
     q_vectors: dict[str, np.ndarray],
     search_results: dict[str, list[dict]],
     vector_cache: dict[str, np.ndarray],
@@ -39,6 +40,7 @@ def rerank_all(
     # We will build the chunk index per-question to prevent cross-contamination
 
     result = {}
+    q_text_map = {q.id: q.text for q in questions}
 
     for q_id, q_vec in q_vectors.items():
         hits = search_results.get(q_id, [])
@@ -143,6 +145,7 @@ def rerank_all(
         # Include header chunks in sources
         all_source_chunks = header_chunks + top_chunks
         result[q_id] = {
+            "question": q_text_map.get(q_id, ""),
             "context": "\n\n===\n\n".join(context_parts),
             "sources": [
                 {"filename": c["filename"], "page_nums": c["page_nums"]}
