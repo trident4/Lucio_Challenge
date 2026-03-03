@@ -52,14 +52,27 @@ async def lifespan(app: FastAPI):
 
     settings = Settings()
     app.state.settings = settings
-    app.state.client = AsyncOpenAI(
+
+    # 1. Always create the local embedding client
+    app.state.embed_client = AsyncOpenAI(
         base_url=settings.mac_studio_base_url,
         api_key=settings.mac_studio_api_key,
     )
 
-    # Probe dimensions param support once at startup
+    # 2. Create the LLM client (OpenRouter override or fallback to local)
+    if settings.openrouter_api_key:
+        logger.info("OpenRouter API Key detected: Routing LLM inference to OpenRouter.")
+        app.state.llm_client = AsyncOpenAI(
+            base_url=settings.openrouter_base_url,
+            api_key=settings.openrouter_api_key,
+        )
+    else:
+        logger.info("No OpenRouter Key: Routing LLM inference to Mac Studio.")
+        app.state.llm_client = app.state.embed_client
+
+    # Probe dimensions param support on the EMBEDDING client
     try:
-        await app.state.client.embeddings.create(
+        await app.state.embed_client.embeddings.create(
             input=["probe"],
             model=settings.embedding_model,
             dimensions=settings.embedding_dimensions,
@@ -88,14 +101,15 @@ app.mount("/ui", StaticFiles(directory="static", html=True), name="static")
 @app.post("/challenge/run", response_model=ChallengeResponse)
 async def challenge_run(req: ChallengeRequest, request: Request):
     """Execute the full 30-second RAG pipeline."""
-    client: AsyncOpenAI = request.app.state.client
+    embed_client: AsyncOpenAI = request.app.state.embed_client
+    llm_client: AsyncOpenAI = request.app.state.llm_client
     settings: Settings = request.app.state.settings
     t = [time.perf_counter()]
 
     # ── Phase 1 & 2: Fetch, Extract, Index ─────────────────────────────
     # Lock globally to prevent 15 simultaneous 100MB downloads
     async with corpus_lock:
-        if req.corpus_url in corpus_cache:
+        if req.corpus_url in corpus_cache and not req.bypass_cache:
             cache_entry = corpus_cache[req.corpus_url]
             chunks = cache_entry["chunks"]
             metadata = cache_entry["metadata"]
@@ -121,13 +135,14 @@ async def challenge_run(req: ChallengeRequest, request: Request):
 
     # ── Phase 3: Retrieve + Embed ───────────────────────────────────────
     search_results = await search_all(index, req.questions, settings.bm25_top_k)
-    await embed_and_cache(client, search_results, vector_cache, settings)
-    q_vectors = await embed_questions(client, req.questions, settings)
+    await embed_and_cache(embed_client, search_results, vector_cache, settings)
+    q_vectors = await embed_questions(embed_client, req.questions, settings)
     log_phase("Phase 3: Retrieve+Embed", t)
 
     # ── Phase 4: Rerank ─────────────────────────────────────────────────
+    actual_top_k = req.rerank_top_k or settings.rerank_top_k
     reranked = rerank_all(
-        req.questions, q_vectors, search_results, vector_cache, settings.rerank_top_k
+        req.questions, q_vectors, search_results, vector_cache, actual_top_k
     )
     log_phase("Phase 4: Rerank", t)
 
@@ -136,17 +151,26 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     log_phase("Phase 4.5: Compress (Bypassed)", t)
 
     # ── Phase 5: LLM Inference ──────────────────────────────────────────
-    llm_answers = await run_inference(
-        client, req.questions, compressed, metadata, settings
+    llm_answers, total_tokens = await run_inference(
+        llm_client,
+        req.questions,
+        compressed,
+        metadata,
+        settings,
+        model_override=req.llm_model,
     )
     log_phase("Phase 5: LLM", t)
 
     # ── Phase 6: Assemble ───────────────────────────────────────────────
     response = assemble_response(req.questions, llm_answers, reranked)
+
+    total_time = t[-1] - t[0]
+    response.total_time = round(total_time, 3)
+    response.total_tokens = total_tokens
+
     log_phase("Phase 6: Assemble", t)
 
-    total = t[-1] - t[0]
     logger.info(
-        f"🏁 Total time: {total:.3f}s {'✓ UNDER 30s' if total < 30 else '⚠ OVER 30s!'}"
+        f"🏁 Total time: {total_time:.3f}s {'✓ UNDER 30s' if total_time < 30 else '⚠ OVER 30s!'}"
     )
     return response

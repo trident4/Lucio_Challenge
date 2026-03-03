@@ -77,26 +77,24 @@ async def run_inference(
     reranked: dict[str, dict],
     doc_metadata: list[dict],
     settings: Settings,
-) -> dict[str, str]:
+    model_override: str | None = None,
+) -> tuple[dict[str, str], int]:
     """Fire all LLM prompts concurrently and collect answers.
 
-    Args:
-        client: AsyncOpenAI client pointing to Mac Studio.
-        questions: List of Question objects.
-        reranked: question_id -> {context, sources} from Phase 4.
-        doc_metadata: Corpus-level document metadata from Phase 1.
-        settings: App settings.
-
     Returns:
-        Dict mapping question_id -> answer string.
+        Tuple of (Dict mapping question_id -> answer, total_token_usage)
     """
+    total_tokens = 0
+    token_lock = asyncio.Lock()
+    model_to_use = model_override or settings.llm_model
 
     async def _ask(q) -> tuple[str, str]:
+        nonlocal total_tokens
         context = reranked.get(q.id, {}).get("context", "")
         user_prompt = _build_user_prompt(q.text, context, doc_metadata)
         try:
             resp = await client.chat.completions.create(
-                model=settings.llm_model,
+                model=model_to_use,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
@@ -104,6 +102,11 @@ async def run_inference(
                 temperature=settings.llm_temperature,
                 max_tokens=settings.llm_max_tokens,
             )
+
+            usage = resp.usage.total_tokens if resp.usage else 0
+            async with token_lock:
+                total_tokens += usage
+
             return q.id, resp.choices[0].message.content
         except Exception as e:
             logger.error(f"LLM call failed for question {q.id}: {e}")
@@ -112,5 +115,7 @@ async def run_inference(
     results = await asyncio.gather(*[_ask(q) for q in questions])
     answers = dict(results)
 
-    logger.info(f"LLM inference complete: {len(answers)} answers")
-    return answers
+    logger.info(
+        f"LLM inference complete: {len(answers)} answers, {total_tokens} tokens"
+    )
+    return answers, total_tokens

@@ -1,0 +1,117 @@
+[
+  {
+    "Model": "GPT-4o-mini",
+    "K": 8,
+    "Accuracy": "100.0%",
+    "Correct Qs": "7/7",
+    "Latency": "96.66s",
+    "Tokens": "71,686",
+    "Est. Cost": "$0.0143",
+    "Failures": []
+  },
+  {
+    "Model": "Claude 3 Haiku",
+    "K": 8,
+    "Accuracy": "65.2%",
+    "Correct Qs": "6/7",
+    "Latency": "11.81s",
+    "Tokens": "81,473",
+    "Est. Cost": "$0.0285",
+    "Failures": [
+      {
+        "q_id": "q4",
+        "failed_assertions": [
+          "Dissent author",
+          "Dissent joiner O'Connor",
+          "Dissent joiner Thomas",
+          "Majority joiner Rehnquist",
+          "Majority joiner Kennedy",
+          "Majority joiner Souter",
+          "Majority joiner Stevens",
+          "Majority joiner White"
+        ],
+        "answer": "Based on the context provided, the bench in the Eastman Kodak Co. v. Image Technical Services, Inc. case was:\n\n- The Supreme Court of the United States.\n\nThe case was decided by the Supreme Court, with Justice Blackmun delivering the opinion of the Court. The opinion states that the Court granted certiorari due to the importance of the issue."
+      }
+    ]
+  },
+  {
+    "Model": "Mistral Nemo",
+    "K": 8,
+    "Accuracy": "82.6%",
+    "Correct Qs": "6/7",
+    "Latency": "21.83s",
+    "Tokens": "82,603",
+    "Est. Cost": "$0.0124",
+    "Failures": [
+      {
+        "q_id": "q4",
+        "failed_assertions": [
+          "Majority opinion author",
+          "Dissent joiner O'Connor",
+          "Dissent joiner Thomas",
+          "Majority joiner Stevens"
+        ],
+        "answer": "The bench in the Eastman Kodak Co. v. Image Technical Services, Inc. case was composed of the following justices:\n\n* William H. Rehnquist, Chief Justice\n* Byron R. White\n* Antonin Scalia\n* Anthony M. Kennedy\n* David H. Souter"
+      }
+    ]
+  },
+  {
+    "Model": "Llama 3.1 8B",
+    "K": 8,
+    "Accuracy": "60.9%",
+    "Correct Qs": "6/7",
+    "Latency": "11.67s",
+    "Tokens": "72,145",
+    "Est. Cost": "$0.0036",
+    "Failures": [
+      {
+        "q_id": "q4",
+        "failed_assertions": [
+          "Majority opinion author",
+          "Dissent author",
+          "Dissent joiner O'Connor",
+          "Dissent joiner Thomas",
+          "Majority joiner Rehnquist",
+          "Majority joiner Kennedy",
+          "Majority joiner Souter",
+          "Majority joiner Stevens",
+          "Majority joiner White"
+        ],
+        "answer": "The bench in the Eastman Kodak Case was 6-3."
+      }
+    ]
+  },
+  {
+    "Model": "Nemo (Justice-12)",
+    "K": 12,
+    "Accuracy": "56.5%",
+    "Correct Qs": "5/7",
+    "Latency": "40.28s",
+    "Tokens": "122,342",
+    "Est. Cost": "$0.0184",
+    "Failures": [
+      {
+        "q_id": "q3",
+        "failed_assertions": [
+          "Mentions HHI metric"
+        ],
+        "answer": "The Competition Commission of India (CCI) uses several metrics to determine if a combination (merger or acquisition) would be anticompetitive and have an appreciable adverse effect on competition (AAEC) in the relevant market. Some of the key metrics and factors considered by CCI are:\n\n1. **Market Share**: The combined market share of the parties before and after the merger. A high combined market share may indicate a higher likelihood of AAEC.\n   - Horizontal Overlap: The extent to which the parties operate in the same market and compete with each other.\n   - Vertical Overlap: The extent to which the parties operate at different stages of the production or supply chain and may have the ability to control or influence each other's activities.\n\n2. **Barriers to Entry**: The ease or difficulty for new competitors to enter the market. High barriers to entry may indicate a higher likelihood of AAEC.\n\n3. **Countervailing Power**: The ability of customers, suppliers, or other market participants to influence the pricing or behavior of the merged entity. Low countervailing power may indicate a higher likelihood of AAEC.\n\n4. **Concentration**: The level of concentration in the market. High concentration may indicate a higher likelihood of AAEC.\n\n5. **Price Effects**: The likelihood that the combination would result in a significant and sustainable increase in prices or profit margins.\n\n6. **Innovation**: The impact of the combination on innovation in the relevant market. A reduction in innovation may indicate a higher likelihood of AAEC.\n\n7. **Failing Firm Defense**: Whether one of the merging parties is a failing firm, and if the merger is necessary to prevent the exit of that firm.\n\n8. **Economic Development**: Whether the combination offers significant benefits to economic development, such as enhanced productivity, infrastructure growth, technological advancement, or employment generation.\n\n9. **Substitute Availability**: The availability of substitutes in the market. The presence of viable substitutes can reduce the risk of market power concentration.\n\n10. **Elimination of a Key Competitor**: Whether the merger would remove a strong and effective competitor, thereby reducing market rivalry.\n\nThe CCI considers these factors and may also conduct market studies, analyze market data, and seek input from third parties, such as competitors and customers, to assess the potential AAEC of a proposed combination."
+      },
+      {
+        "q_id": "q4",
+        "failed_assertions": [
+          "Majority opinion author",
+          "Dissent author",
+          "Dissent joiner O'Connor",
+          "Dissent joiner Thomas",
+          "Majority joiner Rehnquist",
+          "Majority joiner Kennedy",
+          "Majority joiner Souter",
+          "Majority joiner Stevens",
+          "Majority joiner White"
+        ],
+        "answer": "The bench in the Eastman Kodak case was the Supreme Court of the United States."
+      }
+    ]
+  }
+]
