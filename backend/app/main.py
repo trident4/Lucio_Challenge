@@ -24,6 +24,8 @@ from app.reranker.compressor import compress_context
 from app.schemas import ChallengeRequest, ChallengeResponse
 from app.search.indexer import build_index
 from app.search.retriever import search_all
+from collections import Counter
+
 from app.state import vector_cache, corpus_cache, corpus_lock
 
 logging.basicConfig(level=logging.INFO)
@@ -53,22 +55,35 @@ async def lifespan(app: FastAPI):
     settings = Settings()
     app.state.settings = settings
 
-    # 1. Always create the local embedding client
-    app.state.embed_client = AsyncOpenAI(
+    # 1. Always create Mac Studio client
+    mac_studio_client = AsyncOpenAI(
         base_url=settings.mac_studio_base_url,
         api_key=settings.mac_studio_api_key,
     )
 
-    # 2. Create the LLM client (OpenRouter override or fallback to local)
+    # 2. Create OpenRouter client if key exists
+    openrouter_client = None
     if settings.openrouter_api_key:
-        logger.info("OpenRouter API Key detected: Routing LLM inference to OpenRouter.")
-        app.state.llm_client = AsyncOpenAI(
+        openrouter_client = AsyncOpenAI(
             base_url=settings.openrouter_base_url,
             api_key=settings.openrouter_api_key,
         )
+
+    # 3. Route embedding client based on provider setting
+    if settings.embedding_provider == "openrouter" and openrouter_client:
+        app.state.embed_client = openrouter_client
+        logger.info("Embedding → OpenRouter (%s)", settings.embedding_model)
     else:
-        logger.info("No OpenRouter Key: Routing LLM inference to Mac Studio.")
-        app.state.llm_client = app.state.embed_client
+        app.state.embed_client = mac_studio_client
+        logger.info("Embedding → Mac Studio (%s)", settings.embedding_model)
+
+    # 4. Route LLM client (OpenRouter override or fallback to local)
+    if openrouter_client:
+        app.state.llm_client = openrouter_client
+        logger.info("LLM → OpenRouter (%s)", settings.llm_model)
+    else:
+        app.state.llm_client = mac_studio_client
+        logger.info("LLM → Mac Studio (%s)", settings.llm_model)
 
     # Probe dimensions param support on the EMBEDDING client
     try:
@@ -84,9 +99,7 @@ async def lifespan(app: FastAPI):
             "Embedding API: dimensions param unsupported → will truncate manually"
         )
 
-    logger.info(
-        f"Lucio ready — LLM={settings.llm_model}, Embed={settings.embedding_model}"
-    )
+    logger.info("Lucio ready")
     yield
 
 
@@ -122,6 +135,8 @@ async def challenge_run(req: ChallengeRequest, request: Request):
             chunks, metadata = await loop.run_in_executor(
                 None, run_extraction, file_tuples
             )
+            type_dist = Counter(m.get("type", "?") for m in metadata)
+            logger.info(f"Extraction: {len(metadata)} docs, types: {dict(type_dist)}")
             log_phase("Phase 1: Extract", t)
 
             index = build_index(chunks)
@@ -142,7 +157,7 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     # ── Phase 4: Rerank ─────────────────────────────────────────────────
     actual_top_k = req.rerank_top_k or settings.rerank_top_k
     reranked = rerank_all(
-        req.questions, q_vectors, search_results, vector_cache, actual_top_k
+        req.questions, q_vectors, search_results, vector_cache, chunks, actual_top_k
     )
     log_phase("Phase 4: Rerank", t)
 

@@ -32,6 +32,11 @@ def _prepare_for_embedding(text: str) -> str:
     return text
 
 
+def _needs_prefix(model_name: str) -> bool:
+    """Nomic models require search_document/search_query prefixes."""
+    return "nomic" in model_name.lower()
+
+
 async def embed_batch(
     client: AsyncOpenAI,
     texts: list[str],
@@ -117,8 +122,9 @@ async def embed_and_cache(
         # Batch embed with truncation
         for i in range(0, len(missing), settings.embedding_batch_size):
             batch_ids = missing[i : i + settings.embedding_batch_size]
+            prefix = "search_document: " if _needs_prefix(settings.embedding_model) else ""
             batch_texts = [
-                _prepare_for_embedding(f"search_document: {content_lookup[cid]}")
+                _prepare_for_embedding(f"{prefix}{content_lookup[cid]}")
                 for cid in batch_ids
             ]
             vectors = await embed_batch(client, batch_texts, settings)
@@ -144,7 +150,8 @@ async def embed_questions(
         Dict mapping question_id -> 256d numpy vector.
     """
     async with embedding_lock:
-        texts = [f"search_query: {q.text}" for q in questions]
+        prefix = "search_query: " if _needs_prefix(settings.embedding_model) else ""
+        texts = [f"{prefix}{q.text}" for q in questions]
         vectors = await embed_batch(client, texts, settings)
         result = {q.id: v for q, v in zip(questions, vectors)}
         logger.info(f"Embedded {len(questions)} question vectors")
