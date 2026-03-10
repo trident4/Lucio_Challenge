@@ -25,7 +25,8 @@ logger = logging.getLogger("lucio.workers")
 CHUNK_SIZE = 2000  # chars per chunk (~500 tokens, ~half a page)
 
 # Document type classification patterns
-SCOTUS_PATTERN = re.compile(r"\d+\s+U\.S\.\s+\d+")
+SCOTUS_PATTERN = re.compile(r"\d+\s+U\.\s*S\.\s+\d+")
+EARNINGS_PATTERN = re.compile(r"earnings|transcript", re.IGNORECASE)
 
 
 def _classify_document(filename: str) -> str:
@@ -36,6 +37,8 @@ def _classify_document(filename: str) -> str:
     """
     if SCOTUS_PATTERN.search(filename):
         return "SCOTUS case"
+    if EARNINGS_PATTERN.search(filename):
+        return "Earnings transcript"
     if " v. " in filename or " v " in filename:
         return "Legal case"
     if filename.lower().endswith(".docx"):
