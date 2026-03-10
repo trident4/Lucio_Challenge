@@ -167,8 +167,10 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     # ── Phase 3: Retrieve + Embed ───────────────────────────────────────
     search_results = await search_all(index, req.questions, settings.bm25_top_k)
     vec_cache_before = len(vector_cache)
-    await embed_and_cache(embed_client, search_results, vector_cache, settings)
-    q_vectors = await embed_questions(embed_client, req.questions, settings)
+    _, q_vectors = await asyncio.gather(
+        embed_and_cache(embed_client, search_results, vector_cache, settings),
+        embed_questions(embed_client, req.questions, settings),
+    )
     log_phase("Phase 3: Retrieve+Embed", t)
 
     # ── Phase 4: Rerank ─────────────────────────────────────────────────

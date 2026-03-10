@@ -35,7 +35,7 @@ async def fetch_corpus(corpus_url: str) -> io.BytesIO:
             return io.BytesIO(f.read())
 
     logger.info(f"Downloading corpus from: {corpus_url}")
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.get(corpus_url)
         resp.raise_for_status()
         return io.BytesIO(resp.content)

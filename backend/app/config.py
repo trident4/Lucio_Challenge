@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 1500
     llm_temperature: float = 0.0
     embedding_batch_size: int = 20
+    embedding_concurrency: int = 5
 
     # Runtime flags (set programmatically, not from env)
     supports_dimensions_param: bool = True

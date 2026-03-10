@@ -6,16 +6,16 @@ batched in groups of EMBEDDING_BATCH_SIZE.
 Key design decisions:
 - Uses the raw 'content' field for embedding (no metadata tags)
 - Truncates text to MAX_EMBED_CHARS before sending (embedding model context safety)
-- Default batch size is 20 (not 100) to stay within nginx/API body limits
+- Fires batches concurrently (up to embedding_concurrency) with retry logic
 """
 
+import asyncio
 import logging
 
 import numpy as np
 from openai import AsyncOpenAI
 
 from app.config import Settings
-from app.state import embedding_lock
 
 logger = logging.getLogger("lucio.embedder")
 
@@ -103,35 +103,52 @@ async def embed_and_cache(
     """
     # Build content lookup from all search results (deduplicates naturally)
     # Use 'content' (raw text) for embedding, not 'text' (enriched with metadata)
-    async with embedding_lock:
-        content_lookup: dict[str, str] = {}
-        for hits in search_results.values():
-            for h in hits:
-                content_lookup[h["chunk_id"]] = h["content"]
+    content_lookup: dict[str, str] = {}
+    for hits in search_results.values():
+        for h in hits:
+            content_lookup[h["chunk_id"]] = h["content"]
 
-        # Find cache misses
-        missing = [cid for cid in content_lookup if cid not in vector_cache]
-        if not missing:
-            logger.info("All chunks already cached — skipping embedding")
-            return
+    # Find cache misses
+    missing = [cid for cid in content_lookup if cid not in vector_cache]
+    if not missing:
+        logger.info("All chunks already cached — skipping embedding")
+        return
 
-        logger.info(
-            f"Embedding {len(missing)} uncached chunks in batches of {settings.embedding_batch_size}"
-        )
+    n_batches = (len(missing) + settings.embedding_batch_size - 1) // settings.embedding_batch_size
+    logger.info(
+        f"Embedding {len(missing)} chunks in {n_batches} batches (max {settings.embedding_concurrency} concurrent)"
+    )
 
-        # Batch embed with truncation
-        for i in range(0, len(missing), settings.embedding_batch_size):
-            batch_ids = missing[i : i + settings.embedding_batch_size]
-            prefix = "search_document: " if _needs_prefix(settings.embedding_model) else ""
-            batch_texts = [
-                _prepare_for_embedding(f"{prefix}{content_lookup[cid]}")
-                for cid in batch_ids
-            ]
-            vectors = await embed_batch(client, batch_texts, settings)
-            for cid, vec in zip(batch_ids, vectors):
-                vector_cache[cid] = vec
+    prefix = "search_document: " if _needs_prefix(settings.embedding_model) else ""
+    batches = []
+    for i in range(0, len(missing), settings.embedding_batch_size):
+        batch_ids = missing[i : i + settings.embedding_batch_size]
+        batch_texts = [
+            _prepare_for_embedding(f"{prefix}{content_lookup[cid]}")
+            for cid in batch_ids
+        ]
+        batches.append((batch_ids, batch_texts))
 
-        logger.info(f"Cached {len(missing)} new chunk vectors")
+    sem = asyncio.Semaphore(settings.embedding_concurrency)
+
+    async def _embed_one_batch(batch_ids, batch_texts):
+        async with sem:
+            for attempt in range(3):
+                try:
+                    vectors = await embed_batch(client, batch_texts, settings)
+                    for cid, vec in zip(batch_ids, vectors):
+                        vector_cache[cid] = vec
+                    return
+                except Exception as e:
+                    if attempt < 2:
+                        wait = 0.5 * (2 ** attempt)
+                        logger.warning(f"Embed batch failed (attempt {attempt+1}/3): {e}, retry in {wait}s")
+                        await asyncio.sleep(wait)
+                    else:
+                        logger.error(f"Embed batch failed after 3 attempts: {e}, skipping {len(batch_ids)} chunks")
+
+    await asyncio.gather(*[_embed_one_batch(ids, texts) for ids, texts in batches])
+    logger.info(f"Cached {len(missing)} new chunk vectors")
 
 
 async def embed_questions(
@@ -149,10 +166,19 @@ async def embed_questions(
     Returns:
         Dict mapping question_id -> 256d numpy vector.
     """
-    async with embedding_lock:
-        prefix = "search_query: " if _needs_prefix(settings.embedding_model) else ""
-        texts = [f"{prefix}{q.text}" for q in questions]
-        vectors = await embed_batch(client, texts, settings)
-        result = {q.id: v for q, v in zip(questions, vectors)}
-        logger.info(f"Embedded {len(questions)} question vectors")
-        return result
+    prefix = "search_query: " if _needs_prefix(settings.embedding_model) else ""
+    texts = [f"{prefix}{q.text}" for q in questions]
+    for attempt in range(3):
+        try:
+            vectors = await embed_batch(client, texts, settings)
+            result = {q.id: v for q, v in zip(questions, vectors)}
+            logger.info(f"Embedded {len(questions)} question vectors")
+            return result
+        except Exception as e:
+            if attempt < 2:
+                wait = 0.5 * (2 ** attempt)
+                logger.warning(f"Question embedding failed (attempt {attempt+1}/3): {e}, retry in {wait}s")
+                await asyncio.sleep(wait)
+            else:
+                logger.error(f"Question embedding failed after 3 attempts: {e}")
+                raise
