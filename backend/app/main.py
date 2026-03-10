@@ -108,7 +108,23 @@ app = FastAPI(title="Lucio Speedrun", lifespan=lifespan)
 # Mount the static directory for the testing UI at /ui/
 app.mount("/ui", StaticFiles(directory="static", html=True), name="static")
 
-# ── The Endpoint ────────────────────────────────────────────────────────────
+# ── Endpoints ──────────────────────────────────────────────────────────────
+
+
+@app.get("/settings")
+async def get_settings(request: Request):
+    """Expose non-secret settings for eval metadata."""
+    s: Settings = request.app.state.settings
+    return {
+        "embedding_model": s.embedding_model,
+        "embedding_provider": s.embedding_provider,
+        "embedding_dimensions": s.embedding_dimensions,
+        "llm_model": s.llm_model,
+        "bm25_top_k": s.bm25_top_k,
+        "rerank_top_k": s.rerank_top_k,
+        "llm_max_tokens": s.llm_max_tokens,
+        "llm_temperature": s.llm_temperature,
+    }
 
 
 @app.post("/challenge/run", response_model=ChallengeResponse)
@@ -150,6 +166,7 @@ async def challenge_run(req: ChallengeRequest, request: Request):
 
     # ── Phase 3: Retrieve + Embed ───────────────────────────────────────
     search_results = await search_all(index, req.questions, settings.bm25_top_k)
+    vec_cache_before = len(vector_cache)
     await embed_and_cache(embed_client, search_results, vector_cache, settings)
     q_vectors = await embed_questions(embed_client, req.questions, settings)
     log_phase("Phase 3: Retrieve+Embed", t)
@@ -182,6 +199,7 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     total_time = t[-1] - t[0]
     response.total_time = round(total_time, 3)
     response.total_tokens = total_tokens
+    response.cache_hit = vec_cache_before > 0
 
     log_phase("Phase 6: Assemble", t)
 
