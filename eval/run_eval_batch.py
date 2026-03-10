@@ -52,6 +52,7 @@ def main(api_url: str, corpus_url: str, include_battle: bool):
     payload = {
         "corpus_url": corpus,
         "questions": [{"id": q["id"], "text": q["text"]} for q in questions],
+        "bypass_cache": True,
     }
 
     start_total = time.perf_counter()
