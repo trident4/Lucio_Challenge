@@ -134,6 +134,7 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     llm_client: AsyncOpenAI = request.app.state.llm_client
     settings: Settings = request.app.state.settings
     t = [time.perf_counter()]
+    phase_times: dict[str, float] = {}
 
     # ── Phase 1 & 2: Fetch, Extract, Index ─────────────────────────────
     # Lock globally to prevent 15 simultaneous 100MB downloads
@@ -144,6 +145,8 @@ async def challenge_run(req: ChallengeRequest, request: Request):
             metadata = cache_entry["metadata"]
             index = cache_entry["index"]
             log_phase("Phase 1+2: Cached Index", t)
+            phase_times["extract"] = 0.0
+            phase_times["index"] = 0.0
         else:
             zip_bytes = await fetch_corpus(req.corpus_url)
             file_tuples = unzip_to_tuples(zip_bytes)
@@ -154,9 +157,11 @@ async def challenge_run(req: ChallengeRequest, request: Request):
             type_dist = Counter(m.get("type", "?") for m in metadata)
             logger.info(f"Extraction: {len(metadata)} docs, types: {dict(type_dist)}")
             log_phase("Phase 1: Extract", t)
+            phase_times["extract"] = round(t[-1] - t[-2], 3)
 
             index = build_index(chunks)
             log_phase("Phase 2: Index", t)
+            phase_times["index"] = round(t[-1] - t[-2], 3)
 
             corpus_cache[req.corpus_url] = {
                 "chunks": chunks,
@@ -172,6 +177,7 @@ async def challenge_run(req: ChallengeRequest, request: Request):
         embed_questions(embed_client, req.questions, settings),
     )
     log_phase("Phase 3: Retrieve+Embed", t)
+    phase_times["retrieve_embed"] = round(t[-1] - t[-2], 3)
 
     # ── Phase 4: Rerank ─────────────────────────────────────────────────
     actual_top_k = req.rerank_top_k or settings.rerank_top_k
@@ -179,6 +185,7 @@ async def challenge_run(req: ChallengeRequest, request: Request):
         req.questions, q_vectors, search_results, vector_cache, chunks, actual_top_k
     )
     log_phase("Phase 4: Rerank", t)
+    phase_times["rerank"] = round(t[-1] - t[-2], 3)
 
     # ── Phase 4.5: Compress (BYPASSED) ──────────────────────────────────
     compressed = reranked
@@ -194,6 +201,7 @@ async def challenge_run(req: ChallengeRequest, request: Request):
         model_override=req.llm_model,
     )
     log_phase("Phase 5: LLM", t)
+    phase_times["llm"] = round(t[-1] - t[-2], 3)
 
     # ── Phase 6: Assemble ───────────────────────────────────────────────
     response = assemble_response(req.questions, llm_answers, reranked)
@@ -202,6 +210,7 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     response.total_time = round(total_time, 3)
     response.total_tokens = total_tokens
     response.cache_hit = vec_cache_before > 0
+    response.phase_times = phase_times
 
     log_phase("Phase 6: Assemble", t)
 

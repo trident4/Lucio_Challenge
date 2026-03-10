@@ -38,7 +38,8 @@ def rerank_all(
     Returns:
         Dict mapping question_id -> {context, sources}
     """
-    # We will build the chunk index per-question to prevent cross-contamination
+    # Build chunk index ONCE for all questions (immutable lookup)
+    global_chunks_by_file = _build_chunk_index(all_chunks)
 
     result = {}
     q_text_map = {q.id: q.text for q in questions}
@@ -54,10 +55,6 @@ def rerank_all(
         if not valid_hits:
             result[q_id] = {"context": "", "sources": []}
             continue
-
-        # We will build the chunk index using ALL chunks so we can look up
-        # any neighbor, regardless of whether it matched the BM25 search.
-        global_chunks_by_file = _build_chunk_index(all_chunks)
 
         # ── BM25 ranking (already sorted by Tantivy score) ──
         bm25_rank = {h["chunk_id"]: i for i, h in enumerate(valid_hits)}
