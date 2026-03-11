@@ -112,9 +112,6 @@ async def run_inference(
     async def _ask(q) -> tuple[str, str]:
         nonlocal total_tokens
         context = reranked.get(q.id, {}).get("context", "")
-        if q.id in ["b3", "b4"]:
-            with open(f"/tmp/{q.id}_raw_context.txt", "w") as f:
-                f.write(context)
         user_prompt = _build_user_prompt(q.text, context, doc_metadata)
         try:
             resp = await client.chat.completions.create(

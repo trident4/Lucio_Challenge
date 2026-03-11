@@ -125,6 +125,9 @@ async def lifespan(app: FastAPI):
 
     logger.info("Lucio ready")
     yield
+    # Shutdown: clean up persistent process pool
+    process_pool.shutdown(wait=False, cancel_futures=True)
+    logger.info("Process pool shut down")
 
 
 app = FastAPI(title="Lucio Speedrun", lifespan=lifespan)
