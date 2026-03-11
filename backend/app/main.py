@@ -26,10 +26,34 @@ from app.search.indexer import build_index
 from app.search.retriever import search_all
 from collections import Counter
 
-from app.state import vector_cache, corpus_cache, corpus_lock
+from app.state import vector_cache, corpus_cache, corpus_lock, process_pool
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("lucio")
+
+
+# ── Sync extraction pipeline (runs in thread executor) ─────────────────────
+
+
+def _extract_pipeline(corpus_source: str) -> tuple[list[dict], list[dict], object, dict]:
+    """All sync work in one executor call: unzip → extract → index.
+
+    Keeps the event loop free for concurrent question embedding.
+    """
+    t0 = time.perf_counter()
+    file_tuples = unzip_to_tuples(corpus_source)
+    t1 = time.perf_counter()
+    chunks, metadata = run_extraction(file_tuples, pool=process_pool)
+    del file_tuples  # Free ~1GB of raw bytes
+    t2 = time.perf_counter()
+    index = build_index(chunks)
+    t3 = time.perf_counter()
+    return chunks, metadata, index, {
+        "unzip": round(t1 - t0, 3),
+        "extract": round(t2 - t1, 3),
+        "index": round(t3 - t2, 3),
+    }
+
 
 # ── Timing helper ───────────────────────────────────────────────────────────
 
@@ -136,8 +160,13 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     t = [time.perf_counter()]
     phase_times: dict[str, float] = {}
 
+    # ── Start question embedding early (runs during extraction) ──────
+    q_embed_task = asyncio.create_task(
+        embed_questions(embed_client, req.questions, settings)
+    )
+
     # ── Phase 1 & 2: Fetch, Extract, Index ─────────────────────────────
-    # Lock globally to prevent 15 simultaneous 100MB downloads
+    # Lock globally to prevent simultaneous redundant downloads
     async with corpus_lock:
         if req.corpus_url in corpus_cache and not req.bypass_cache:
             cache_entry = corpus_cache[req.corpus_url]
@@ -148,20 +177,19 @@ async def challenge_run(req: ChallengeRequest, request: Request):
             phase_times["extract"] = 0.0
             phase_times["index"] = 0.0
         else:
-            zip_bytes = await fetch_corpus(req.corpus_url)
-            file_tuples = unzip_to_tuples(zip_bytes)
+            corpus_source = await fetch_corpus(req.corpus_url)
             loop = asyncio.get_event_loop()
-            chunks, metadata = await loop.run_in_executor(
-                None, run_extraction, file_tuples
+            chunks, metadata, index, pipeline_times = await loop.run_in_executor(
+                None, _extract_pipeline, corpus_source
             )
             type_dist = Counter(m.get("type", "?") for m in metadata)
-            logger.info(f"Extraction: {len(metadata)} docs, types: {dict(type_dist)}")
-            log_phase("Phase 1: Extract", t)
-            phase_times["extract"] = round(t[-1] - t[-2], 3)
-
-            index = build_index(chunks)
-            log_phase("Phase 2: Index", t)
-            phase_times["index"] = round(t[-1] - t[-2], 3)
+            logger.info(
+                f"Extraction: {len(metadata)} docs, types: {dict(type_dist)}, "
+                f"timing: {pipeline_times}"
+            )
+            log_phase("Phase 1+2: Extract+Index", t)
+            phase_times["extract"] = pipeline_times["unzip"] + pipeline_times["extract"]
+            phase_times["index"] = pipeline_times["index"]
 
             corpus_cache[req.corpus_url] = {
                 "chunks": chunks,
@@ -172,10 +200,8 @@ async def challenge_run(req: ChallengeRequest, request: Request):
     # ── Phase 3: Retrieve + Embed ───────────────────────────────────────
     search_results = await search_all(index, req.questions, settings.bm25_top_k)
     vec_cache_before = len(vector_cache)
-    _, q_vectors = await asyncio.gather(
-        embed_and_cache(embed_client, search_results, vector_cache, settings),
-        embed_questions(embed_client, req.questions, settings),
-    )
+    await embed_and_cache(embed_client, search_results, vector_cache, settings)
+    q_vectors = await q_embed_task  # Already done (ran during extraction)
     log_phase("Phase 3: Retrieve+Embed", t)
     phase_times["retrieve_embed"] = round(t[-1] - t[-2], 3)
 

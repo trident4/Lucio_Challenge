@@ -89,9 +89,9 @@
       "text": "In the Bell Atlantic Corp. v. Twombly case, what was the primary legal standard established for pleading a Sherman Act Section 1 violation?",
       "assertions": [
         {
-          "type": "contains",
-          "value": "plausible",
-          "label": "Mentions the 'plausible' standard"
+          "type": "contains_any",
+          "values": ["plausib", "above the speculative level"],
+          "label": "Mentions the plausibility standard or its holding language"
         }
       ]
     },

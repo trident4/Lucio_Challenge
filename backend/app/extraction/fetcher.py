@@ -7,6 +7,7 @@ for multiprocessing dispatch.
 import io
 import logging
 import os
+import tempfile
 import zipfile
 
 import httpx
@@ -20,40 +21,46 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 SKIP_PREFIXES = ("__MACOSX/", "._")
 
 
-async def fetch_corpus(corpus_url: str) -> io.BytesIO:
-    """Download or read a corpus zip into an in-memory BytesIO.
+async def fetch_corpus(corpus_url: str) -> str:
+    """Return a local file path to the corpus zip.
+
+    For local files, returns the path directly (no memory copy).
+    For remote URLs, downloads to a temp file on disk.
 
     Args:
         corpus_url: Local file path or remote HTTP(S) URL.
 
     Returns:
-        BytesIO containing the raw zip bytes.
+        Path string usable with zipfile.ZipFile().
     """
     if os.path.exists(corpus_url):
-        logger.info(f"Loading corpus from local path: {corpus_url}")
-        with open(corpus_url, "rb") as f:
-            return io.BytesIO(f.read())
+        logger.info(f"Using corpus from local path: {corpus_url}")
+        return corpus_url
 
     logger.info(f"Downloading corpus from: {corpus_url}")
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=300.0) as client:
         resp = await client.get(corpus_url)
         resp.raise_for_status()
-        return io.BytesIO(resp.content)
+        tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+        tmp.write(resp.content)
+        tmp.close()
+        logger.info(f"Downloaded corpus to temp file: {tmp.name}")
+        return tmp.name
 
 
-def unzip_to_tuples(zip_bytesio: io.BytesIO) -> list[tuple[str, bytes]]:
+def unzip_to_tuples(source: str | io.BytesIO) -> list[tuple[str, bytes]]:
     """Extract zip contents into picklable (filename, raw_bytes) tuples.
 
     Filters to .pdf/.docx only, skips __MACOSX and dot-files.
 
     Args:
-        zip_bytesio: In-memory zip file.
+        source: File path or in-memory BytesIO of the zip.
 
     Returns:
         List of (filename, file_bytes) tuples ready for multiprocessing.
     """
     tuples = []
-    with zipfile.ZipFile(zip_bytesio, "r") as zf:
+    with zipfile.ZipFile(source, "r") as zf:
         for name in zf.namelist():
             # Skip directories
             if name.endswith("/"):

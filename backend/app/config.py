@@ -26,12 +26,12 @@ class Settings(BaseSettings):
 
     # Tuning parameters
     embedding_dimensions: int = 256
-    bm25_top_k: int = 150
+    bm25_top_k: int = 50
     rerank_top_k: int = 5
     llm_max_tokens: int = 1500
     llm_temperature: float = 0.0
-    embedding_batch_size: int = 20
-    embedding_concurrency: int = 5
+    embedding_batch_size: int = 100
+    embedding_concurrency: int = 10
 
     # Runtime flags (set programmatically, not from env)
     supports_dimensions_param: bool = True
