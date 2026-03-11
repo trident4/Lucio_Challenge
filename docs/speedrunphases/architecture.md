@@ -1,125 +1,175 @@
 ```mermaid
 flowchart TD
-subgraph Client["Local Client / Challenge Server"]
+subgraph Client["Client"]
 Trigger["POST /challenge/run"]
 end
 
-    subgraph M1["Orchestrator (Mac M1 - 16GB RAM)"]
+    subgraph Orchestrator["Orchestrator (MacBook Air - 8GB RAM)"]
         direction TB
-        Fetch["Smart Fetcher: Local or URL"]
-        RAM_Zip[("io.BytesIO Zip File")]
+        Fetch["Smart Fetcher: Path or Temp File"]
+        QEmbed["Early Question Embedding (asyncio.create_task)"]
 
-        subgraph Extraction["Phase 1: Multi-Core Extraction (Behind Global Lock)"]
-            direction LR
-            P1["Core 1: PDF Layout"]
-            P2["Core 2: PDF Layout"]
-            P3["Core 3: DOCX Batch"]
-            P4["Core 4: PDF Layout"]
+        subgraph Pipeline["Phase 1+2: _extract_pipeline (Single Thread Executor Call)"]
+            direction TB
+            Unzip["Unzip to Tuples (disk-backed zipfile)"]
+            subgraph Extraction["Multi-Core Extraction (Persistent ProcessPool)"]
+                direction LR
+                P1["Core 1: PDF Layout"]
+                P2["Core 2: PDF Layout"]
+                P3["Core 3: DOCX"]
+                P4["Core N: PDF Layout"]
+            end
+            Tantivy[("Tantivy RAM Index")]
         end
 
-        subgraph Search["Phase 2 & 3: Retrieval & Deduplication"]
-            Tantivy[("Tantivy RAM Index")]
-            BM25["15x Concurrent BM25 Search"]
-            EmbedLock{"Global Embedding Lock"}
+        subgraph Search["Phase 3: Dual BM25 Search + Embed"]
+            BM25_Primary["Primary: Full Question Text"]
+            BM25_Entity["Secondary: Extracted Entities"]
+            Merge["Merge + Dedup by chunk_id"]
+            Semaphore{"Embedding Semaphore (10 concurrent)"}
             Cache{"Global Vector Cache (RAM)"}
         end
 
         subgraph Rerank["Phase 4: Hybrid RRF Rerank"]
-            RRF["Reciprocal Rank Fusion"]
-            Top8["Top 8 Chunks + Neighbors (Golden Config)"]
+            RRF["RRF: BM25 Rank + Cosine Rank (K=60)"]
+            Top8["Top 8 Chunks + ±1 Neighbors"]
         end
+
+        Assembler["Phase 6: Source Extraction + JSON Assembly"]
     end
 
-    subgraph Studio["Remote Brain (Mac Studio)"]
+    subgraph OpenRouter["OpenRouter API"]
         direction TB
-        Embed["Nomic Embed v1.5 - 256d"]
-        Qwen["Qwen-3B-30B Unified Inference"]
+        EmbedAPI["text-embedding-3-large (1024d)"]
+        LLM["gpt-4o-mini"]
     end
 
     %% Connections
     Trigger --> Fetch
-    Fetch --> RAM_Zip
-    RAM_Zip --> Extraction
-    Extraction -->|Windowing| Tantivy
-    Tantivy --> BM25
-    BM25 --> Cache
-    Cache -- "Batch Embed" --> EmbedLock
-    EmbedLock -- "Protected Seq" --> Embed
-    %% Remote Calls
-    Cache -- "Batch Embed" --> Embed
-    Embed -- "256d Vectors" --> Cache
+    Trigger --> QEmbed
+    Fetch --> Unzip
+    Unzip --> Extraction
+    Extraction --> Tantivy
+
+    QEmbed -. "concurrent with extraction" .-> EmbedAPI
+
+    Tantivy --> BM25_Primary
+    Tantivy --> BM25_Entity
+    BM25_Primary --> Merge
+    BM25_Entity --> Merge
+    Merge --> Semaphore
+    Semaphore -- "Batch 100 chunks" --> EmbedAPI
+    EmbedAPI -- "1024d Vectors" --> Cache
     Cache --> RRF
     RRF --> Top8
-    Top8 -- "Async Batch" --> Qwen
-    Qwen -- "Final Answers" --> Aggregator["JSON Aggregator"]
-
-    Aggregator --> Output["Final POST Response"]
+    Top8 -- "15x Concurrent" --> LLM
+    LLM -- "Answers" --> Assembler
+    Assembler --> Output["Final POST Response"]
 
     %% Styling
-    style RAM_Zip fill:#f9f,stroke:#333,stroke-width:2px
     style Tantivy fill:#f9f,stroke:#333,stroke-width:2px
-    style Qwen fill:#bbf,stroke:#333,stroke-width:4px
+    style Cache fill:#f9f,stroke:#333,stroke-width:2px
+    style LLM fill:#bbf,stroke:#333,stroke-width:4px
+    style EmbedAPI fill:#bbf,stroke:#333,stroke-width:2px
 ```
 
 ## Phase Descriptions
 
-### **Phase 1: Multi-Core Extraction & Processing** _(Ideal Time: ~5.5s)_
+### **Phase 0: Early Question Embedding** _(overlapped, ~0.5s)_
 
-- The system downloads the provided ZIP file directly into an in-memory `io.BytesIO` buffer to avoid disk I/O latency.
-- It utilizes a multi-processing pool to concurrently extract text from PDFs (using `PyMuPDF/fitz` in layout mode) and DOCX files.
-- Documents are split into focused semantic chunks (2,000 characters with 200-character overlap).
-- Key metadata (Document ID, Filename, Page Numbers) is extracted and stored in a global state `doc_metadata` dictionary.
+- Before extraction begins, question vectors are fired off via `asyncio.create_task`.
+- Runs concurrently with the extraction pipeline — effectively free latency.
+- 15 question texts embedded into 1024-dimensional vectors via OpenRouter `text-embedding-3-large`.
 
-### **Phase 2: Tantivy Lexical Indexing** _(Ideal Time: ~0.2s)_
+### **Phase 1+2: Extraction Pipeline** _(~13s cold on 1GB, 0s cached)_
 
-- Instantiates a high-speed, Rust-based `Tantivy` search index entirely in memory on the orchestrator machine.
-- Indexes all extracted document chunks to enable lightning-fast BM25 keyword retrieval.
+All sync work runs in a single `run_in_executor` call (`_extract_pipeline`), keeping the event loop free:
 
-### **Phase 3: Hybrid Retrieval & Vector Caching** _(Ideal Time: ~1.5s cached, ~15s cold)_
+1. **Fetch:** For local files, returns the path directly (no memory copy). For remote URLs, downloads to a temp file on disk. Eliminates the old `io.BytesIO` approach that caused ~3.4GB peak memory on 1GB corpora.
+2. **Unzip:** `zipfile.ZipFile(path)` reads entries on demand from disk into `(filename, bytes)` tuples. Filters to `.pdf/.docx` only, skips `__MACOSX` and dot-files.
+3. **Extract:** A persistent `ProcessPoolExecutor` (spawned once at import, workers ignore SIGINT for clean shutdown) distributes extraction across all CPU cores. PDFs use `PyMuPDF/fitz` layout mode; DOCX uses `python-docx`. Documents are split into 2,000-char chunks with 200-char overlap. Document type is classified via regex (SCOTUS, Earnings, Legal, Contract).
+4. **Index:** Builds a Rust-based Tantivy search index in RAM over all chunks (~0.5s for 17K chunks).
+5. **Cache:** Results (chunks, metadata, index) are stored in `corpus_cache` keyed by URL. Subsequent requests skip the entire pipeline.
 
-- Executes a broad BM25 query against the Tantivy index, fetching the top lexical matches (`BM25_TOP_K`).
-- In parallel, checks the global in-memory `vector_cache` for existing semantic embeddings of those chunks.
-- Submits any uncached text chunks and the user's generated queries to the `text-embedding-nomic-embed-text-v1.5` API on the remote Mac Studio.
-- Immediately stores the returned 256-dimensional vectors into the `vector_cache` to serve future queries instantly.
+Global `corpus_lock` prevents simultaneous redundant downloads for the same corpus.
 
-### **Phase 4: Reciprocal Rank Fusion (RRF)** _(Ideal Time: < 0.1s)_
+### **Phase 3: Dual BM25 Retrieval + Embedding** _(~3.7s cold, ~0.8s cached)_
 
-- Calculates the Cosine Similarity between the embedded question and the candidate chunks.
-- Applies the **Reciprocal Rank Fusion (RRF)** algorithm to merge lexical rank (BM25) and semantic rank (Embedding) into a single unified score.
-- Selects the top **8** chunks (The "Golden Config" for 100% accuracy).
-- Dynamically enriches each selected chunk with its **±1 neighboring chunks** to provide continuous semantic context to the LLM.
+**Retrieval — Two BM25 queries per question:**
+- **Primary query:** Full question text → top 50 BM25 matches.
+- **Entity query:** Extracted proper nouns and acronyms (regex: Title Case + ALL_CAPS, stop words filtered) → top 50 BM25 matches.
+- Results merged by `chunk_id` with deduplication (higher BM25 score kept). Effective max: ~100 candidates per question, ~1,000 unique chunks across 15 questions.
 
-### **Phase 5: Unified LLM Inference** _(Ideal Time: ~15s - 45s per batch depending on complexity)_
+**Embedding — Batched with concurrency control:**
+- Deduplicates chunk_ids across all questions, skips already-cached vectors.
+- Batches of 100 chunks fired through `asyncio.Semaphore(10)` for up to 10 concurrent API calls.
+- 3-attempt retry with exponential backoff (0.5s → 1s → 2s) per batch.
+- Uses raw `content` field (no metadata noise) for embedding input.
+- Vectors (1024d) stored in global `vector_cache` for instant reuse.
 
-- Bundles the enriched chunks and a numbered "Document Library" into our highly-engineered System Prompt.
-- Forces the Unified Inference LLM (`Qwen-30B`) running on the Mac Studio to answer factually and strictly append `[Source: exact_filename.pdf]` to every distinct fact.
-- Fires inference requests concurrently for multi-question batches using `asyncio.gather`.
+### **Phase 4: Reciprocal Rank Fusion (RRF) Rerank** _(< 0.1s)_
 
-### **Phase 6: Assembly & Output Filtering** _(Ideal Time: < 0.1s)_
+- Computes cosine similarity between each question vector and candidate chunk vectors.
+- Applies RRF (K=60): `score = 1/(60 + bm25_rank) + 1/(60 + embedding_rank)`.
+- Selects top 8 chunks per question.
+- Enriches each selected chunk with **±1 neighboring chunks** from the same document for continuous semantic context.
+- Injects document header (chunk_0) if not already present.
+- Builds global chunk index once, shared across all questions.
 
-- Receives the raw markdown from the LLM.
-- Analyzes the output using regex (`\[Source:\s*(.+?)\]`) to rigorously detect exactly which files the model actually cited.
-- Filters the original `sources` array to strictly include only the documents actively used by the LLM (preventing UI components from displaying irrelevant background context).
-- Aggregates the responses and formats the final JSON payload for the client.
+### **Phase 5: LLM Inference** _(~12s, API-bound)_
 
-## The Path to Sub-30s Parallelization
+- System prompt demands extreme brevity, exact evidence with quotes, and legal nuance awareness.
+- For counting/listing questions (detected via keyword heuristic), a pre-computed `_build_type_summary` with verified document counts and names is injected as ground truth — prevents LLM miscounting.
+- All 15 questions fired concurrently via `asyncio.gather` to `gpt-4o-mini` on OpenRouter.
+- `max_tokens=1500`, `temperature=0.0`.
 
-To meet the strict competition requirement of processing **15 parallel queries in under 30 seconds**, we conducted extensive load testing yielding the following architectural discoveries:
+### **Phase 6: Assembly & Source Filtering** _(< 0.1s)_
 
-### ❌ What Failed:
+- Extracts inline citations from LLM answers via regex: `[Source: filename]`.
+- Filters source list to only documents the LLM actually cited (fallback to all sources if no citations detected).
+- Merges page numbers across duplicate source references.
+- Formats final JSON response with per-phase timing breakdown.
 
-1. **Remote Vector Sentence Compression:** We initially attempted to split the retrieved context into individual sentences and use the external Nomic API to vectorize and extract the most relevant lines.
-   _Why it failed:_ 7 parallel questions × 100 sentences forced an inescapable serial loop of 700 API calls, instantly adding ~35 seconds of raw network routing blocker before the LLM even started.
-2. **Local BM25-Lite Keyword Compression:** We built a local Python string parser to rank high-weight keyword sentences (numbers, acronyms, capitalized names) directly in CPU `<0.003s`, circumventing the API block. By extracting only the top sentences, it drastically reduced the simultaneous M2 token payload from ~84,000 tokens down to ~14,000 tokens (an 80% reduction), speeding up parallel LLM execution to just 43 seconds.
-   _Why it failed:_ **Semantic Fragmentation.** While it successfully solved the latency bottleneck, aggressively chopping sentences out of paragraphs destroyed the grammatical connective tissue. The "Frankenstein" context caused the LLM to fail complex reasoning questions, dropping our accuracy from a flawless 23/23 down to 20/23 (87%).
-3. **Severe Context Starvation (Top-K = 2):** We attempted bypassing all sentence compression and merely pulling the best 2 chunks from the Tantivy search to artificially minimize the payload.
-   _Why it failed:_ Context starvation. The Qwen model took vastly longer (75+ seconds) because it endlessly iterated to hallucinate or interpolate the missing mathematical context.
+## Performance (Benchmarked on 1GB corpus, 68 docs, 15 questions)
 
-### ✅ What Worked (The Final Architecture):
+| Phase | Cold | Cached | Notes |
+|-------|------|--------|-------|
+| Question Embedding | 0s (overlapped) | 0s | Runs during extraction |
+| Fetch + Unzip | ~2.3s | 0s | Disk-backed, no BytesIO |
+| Extract (8 cores) | ~10s | 0s | Persistent process pool |
+| Index (Tantivy) | ~0.5s | 0s | |
+| Dual BM25 Search | ~0.1s | ~0.1s | |
+| Chunk Embedding | ~3.5s | 0s | ~1,000 chunks in 10 batches |
+| RRF Rerank | < 0.1s | < 0.1s | |
+| LLM (15 concurrent) | ~12s | ~12s | API-bound floor |
+| Assembly | < 0.1s | < 0.1s | |
+| **Total** | **~28.6s** | **~12.6s** | |
 
-1. **Global Corpus & Embedding Locks (`state.py`):**
-   We implemented two rigorous locks:
-   - **Corpus Lock**: Ensures exactly ONE request handles the heavy lifting (Download, Extract, Index) for a zip file, while others wait.
-   - **Embedding Lock**: Serializes calls to the remote Embedding API to prevent hardware saturation and "Model Crashed" errors on the Mac Studio. Parallel requests benefit from a deduplicated global `vector_cache`.
-2. **Phase 4.5 Ablation (The "Golden" Payload [Top-K = 8]):**
-   We completely bypassed surgical sentence-level compression (`Phase 4.5`). Instead, we found that selecting the top **8** contiguous chunks provided the perfect balance of semantic depth and processing speed. This configuration achieved a flawless **100% (23/23)** accuracy score by ensuring the LLM had enough context to distinguish between consolidated and segment-level financial figures (e.g., Meta Revenue). Total parallel time stabilized at ~56s-100s depending on load.
+## Key Config
+
+| Setting | Value |
+|---------|-------|
+| `embedding_model` | `openai/text-embedding-3-large` (via OpenRouter) |
+| `llm_model` | `openai/gpt-4o-mini` (via OpenRouter) |
+| `embedding_dimensions` | 1024 |
+| `bm25_top_k` | 50 |
+| `rerank_top_k` | 8 |
+| `embedding_batch_size` | 100 |
+| `embedding_concurrency` | 10 |
+
+## Global State (`state.py`)
+
+| Object | Purpose |
+|--------|---------|
+| `vector_cache` | `dict[str, np.ndarray]` — chunk_id → 1024d vector, persists across requests |
+| `corpus_cache` | `dict[str, dict]` — corpus_url → {chunks, metadata, index}, avoids re-extraction |
+| `corpus_lock` | `asyncio.Lock` — prevents simultaneous redundant corpus processing |
+| `process_pool` | `ProcessPoolExecutor` — persistent, workers ignore SIGINT for clean Ctrl+C |
+
+## What Failed (Historical)
+
+1. **Remote Vector Sentence Compression:** Splitting context into sentences and re-embedding via API added ~35s of serial network calls before the LLM even started.
+2. **Local BM25-Lite Keyword Compression:** Reduced token payload by 80% but destroyed grammatical context — accuracy dropped from 23/23 to 20/23.
+3. **Context Starvation (Top-K = 2):** Too few chunks caused hallucination and 75s+ LLM times.
+4. **BytesIO for large corpora:** Reading 1GB into memory caused ~3.4GB peak → swap on 8GB Mac → >600s timeout.
+5. **Per-request ProcessPoolExecutor:** macOS `spawn` start method added 2-3s per request for pool creation.

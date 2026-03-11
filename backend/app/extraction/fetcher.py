@@ -38,14 +38,31 @@ async def fetch_corpus(corpus_url: str) -> str:
         return corpus_url
 
     logger.info(f"Downloading corpus from: {corpus_url}")
-    async with httpx.AsyncClient(timeout=300.0) as client:
-        resp = await client.get(corpus_url)
-        resp.raise_for_status()
-        tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
-        tmp.write(resp.content)
+    tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    try:
+        async with httpx.AsyncClient(timeout=300.0, follow_redirects=True) as client:
+            async with client.stream("GET", corpus_url) as resp:
+                resp.raise_for_status()
+                total = int(resp.headers.get("content-length", 0))
+                downloaded = 0
+                last_log = 0
+                async for chunk in resp.aiter_bytes(chunk_size=65536):
+                    tmp.write(chunk)
+                    downloaded += len(chunk)
+                    if total and downloaded - last_log >= 5_000_000:
+                        logger.info(
+                            f"Download: {downloaded // 1_000_000}/"
+                            f"{total // 1_000_000}MB "
+                            f"({downloaded * 100 // total}%)"
+                        )
+                        last_log = downloaded
         tmp.close()
-        logger.info(f"Downloaded corpus to temp file: {tmp.name}")
+        logger.info(f"Downloaded {downloaded / 1_000_000:.1f}MB to {tmp.name}")
         return tmp.name
+    except Exception:
+        tmp.close()
+        os.unlink(tmp.name)
+        raise
 
 
 def unzip_to_tuples(source: str | io.BytesIO) -> list[tuple[str, bytes]]:

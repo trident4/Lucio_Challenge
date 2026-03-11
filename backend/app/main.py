@@ -6,6 +6,7 @@ with per-phase wall-clock timing.
 
 import asyncio
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 
@@ -181,10 +182,18 @@ async def challenge_run(req: ChallengeRequest, request: Request):
             phase_times["index"] = 0.0
         else:
             corpus_source = await fetch_corpus(req.corpus_url)
-            loop = asyncio.get_event_loop()
-            chunks, metadata, index, pipeline_times = await loop.run_in_executor(
-                None, _extract_pipeline, corpus_source
-            )
+            try:
+                loop = asyncio.get_event_loop()
+                chunks, metadata, index, pipeline_times = await loop.run_in_executor(
+                    None, _extract_pipeline, corpus_source
+                )
+            finally:
+                if corpus_source != req.corpus_url:
+                    try:
+                        os.unlink(corpus_source)
+                        logger.info(f"Cleaned up temp file: {corpus_source}")
+                    except OSError:
+                        pass
             type_dist = Counter(m.get("type", "?") for m in metadata)
             logger.info(
                 f"Extraction: {len(metadata)} docs, types: {dict(type_dist)}, "

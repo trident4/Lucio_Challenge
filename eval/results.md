@@ -1,8 +1,8 @@
 # Eval Results
 
-**Date:** 2026-03-11 15:15  
-**Score:** 33/33 (100%)  
-**Time:** 22.1s (UNDER 30s)  
+**Date:** 2026-03-11 17:35  
+**Score:** 32/33 (97%)  
+**Time:** 22.3s (UNDER 30s)  
 **Run type:** Cold  
 
 ## Config
@@ -32,6 +32,10 @@
 | b1 | PASS | 3/3 |
 | b2 | PASS | 1/1 |
 | b3 | PASS | 1/1 |
-| b4 | PASS | 1/1 |
+| b4 | FAIL | 0/1 |
 | b5 | PASS | 4/4 |
-| **Total** | | **33/33** |
+| **Total** | | **32/33** |
+
+## Failures
+
+**b4:** Missing: Identifies that the information is missing from the document  
