@@ -105,7 +105,7 @@ end
 
 ```mermaid
 gantt
-    title Cold Run Timeline (22.3s actual)
+    title Cold Run Timeline (20.0s actual)
     dateFormat ss
     axisFormat %Ss
     section Extraction
@@ -348,14 +348,14 @@ async def search_all(index, questions, top_k=150):
     # ... merge results ...
 ```
 
-- **Primary search:** Full question text → top 50 BM25 matches from Tantivy
-- **Entity search:** Entity-only string → top 50 BM25 matches from Tantivy
+- **Primary search:** Full question text → top 30 BM25 matches from Tantivy
+- **Entity search:** Entity-only string → top 30 BM25 matches from Tantivy
 - Both batches run concurrently via `asyncio.gather` (primary searches fire, then entity searches fire)
 
 **q4 trace:**
 - Primary: `"What was the bench in the Eastman Kodak Case?"` → BM25 finds chunks containing "Eastman", "Kodak", "case", "bench". But "bench" is a common legal term — it appears in other SCOTUS opinions too, diluting results
 - Entity: `"Eastman Kodak Case"` → BM25 directly targets chunks mentioning "Eastman Kodak" — the case header (chunk_0) scores very high because it contains the full case name
-- **The key insight:** Without the entity query, the case header (which lists all 9 justices) might not make the top 50 because "bench" is a common word across legal documents. The entity query guarantees it
+- **The key insight:** Without the entity query, the case header (which lists all 9 justices) might not make the top 30 because "bench" is a common word across legal documents. The entity query guarantees it
 
 ### 5c. Merge & Dedup
 
@@ -380,11 +380,11 @@ def _merge_results(primary, secondary):
 - Primary results inserted first. Secondary results: new chunks added, duplicate chunks keep higher BM25 score
 - Sorted by BM25 score descending
 
-**q4 trace:** Primary returns ~50 chunks from various SCOTUS opinions. Entity query returns ~50 chunks heavily concentrated in the Eastman Kodak opinion. Merged: ~80 unique chunks (significant overlap because "Eastman Kodak" appears in primary results too, but the entity query bumps the case header's score).
+**q4 trace:** Primary returns ~30 chunks from various SCOTUS opinions. Entity query returns ~30 chunks heavily concentrated in the Eastman Kodak opinion. Merged: ~50 unique chunks (significant overlap because "Eastman Kodak" appears in primary results too, but the entity query bumps the case header's score).
 
 **Logging:** `retriever.py:185-188` logs per-question stats:
 ```
-q4: 50 primary + 45 entity (Eastman Kodak Case) → 78 merged
+q4: 30 primary + 28 entity (Eastman Kodak Case) → 48 merged
 ```
 
 ### 5d. Chunk Embedding
@@ -425,14 +425,14 @@ async def embed_and_cache(client, search_results, vector_cache, settings):
     await asyncio.gather(*[_embed_one_batch(ids, texts) for ids, texts in batches])
 ```
 
-- Deduplicates chunk_ids across all 15 questions → ~1,000 unique chunks
+- Deduplicates chunk_ids across all 15 questions → ~600 unique chunks
 - Skips already-cached vectors
 - Batches of 100 chunks, up to 10 concurrent API calls via `asyncio.Semaphore(10)`
 - 3-attempt retry with exponential backoff (0.5s → 1s → 2s)
 - Uses `content` field (raw text), NOT `text` field (which has metadata)
 - Vectors (1024d) stored in global `vector_cache`
 
-**q4 trace:** q4's ~80 merged chunks contribute to the global ~1,000 unique chunks. All are embedded in 10 batches of 100. Each chunk → 1024d vector.
+**q4 trace:** q4's ~50 merged chunks contribute to the global ~600 unique chunks. All are embedded in 6 batches of 100. Each chunk → 1024d vector.
 
 ---
 
@@ -702,11 +702,11 @@ Using **b2** (`"What was the gross margin for Apple Inc. in Q1 2025?"`) as a sec
 
 | Metric | Value |
 |--------|-------|
-| Accuracy | 32/33 assertions (97%) |
-| Cold start time | 22.3s |
+| Accuracy | 33/33 assertions (100%) |
+| Cold start time | 20.0s |
 | Cached time | 12.6s |
 | Cost per run | $0.014 |
-| Speedup from v1 | 23x (527s → 22.3s) |
+| Speedup from v1 | 26x (527s → 20.0s) |
 
 ### Performance Breakdown
 
@@ -717,7 +717,7 @@ Using **b2** (`"What was the gross margin for Apple Inc. in Q1 2025?"`) as a sec
 | Extract (8 cores) | ~10s | 0s | Persistent process pool |
 | Index (Tantivy) | ~0.5s | 0s | |
 | Dual BM25 Search | ~0.1s | ~0.1s | |
-| Chunk Embedding | ~3.5s | 0s | ~1,000 chunks in 10 batches |
+| Chunk Embedding | ~3.5s | 0s | ~600 chunks in 6 batches |
 | RRF Rerank | < 0.1s | < 0.1s | |
 | LLM (15 concurrent) | ~12s | ~12s | API-bound floor |
 | Assembly | < 0.1s | < 0.1s | |
@@ -746,7 +746,7 @@ GPT-4o-mini is 2.5x cheaper than Claude 3 Haiku and outperforms it by 35 percent
 
 ---
 
-## 11. The Iteration Journey (527s → 22.3s)
+## 11. The Iteration Journey (527s → 20.0s)
 
 ### Timeline from `eval/history.jsonl`
 
@@ -758,6 +758,7 @@ GPT-4o-mini is 2.5x cheaper than Claude 3 Haiku and outperforms it by 35 percent
 | Mar 2 | 527s | 60.9% (14/23) | Sentence compression experiment — destroyed accuracy |
 | Mar 9 | 17.6s | 100% (23/23) | OpenRouter switch + concurrent batches + persistent pool |
 | Mar 11 | 22.3s | 97% (32/33) | Expanded to 33 assertions, tighter eval |
+| Mar 14 | 20.0s | 100% (33/33) | Reduced BM25 top-k 50→30, fewer chunks to embed |
 
 ### 5 Key Breakthroughs
 
@@ -792,4 +793,4 @@ GPT-4o-mini is 2.5x cheaper than Claude 3 Haiku and outperforms it by 35 percent
 | `eval/ground_truth.json` | All 12 questions + 33 assertions |
 | `eval/history.jsonl` | Performance timeline (Feb 27 → Mar 11) |
 | `eval/model_benchmark_report.md` | Model comparison data |
-| `eval/results.md` | Latest run: 32/33, 22.3s |
+| `eval/results.md` | Latest run: 33/33, 20.0s |

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # Tuning parameters
     embedding_dimensions: int = 256
-    bm25_top_k: int = 50
+    bm25_top_k: int = 30
     rerank_top_k: int = 5
     llm_max_tokens: int = 1500
     llm_temperature: float = 0.0

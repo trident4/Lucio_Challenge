@@ -1,7 +1,7 @@
 # Project Lucio: Architecture Deep Dive
 **A 6-Phase RAG Pipeline — 1GB Legal Corpus, 15 Questions, Under 30 Seconds**
 
-> 32/33 assertions (97%) | 22.3s cold | 12.6s cached | MacBook Air 8GB RAM
+> 33/33 assertions (100%) | 20.0s cold | 12.6s cached | MacBook Air 8GB RAM
 
 ---
 
@@ -230,10 +230,10 @@ Top 5 decisions that made the biggest impact — presented as decision → alter
 
 ### Headline Numbers
 
-- **32/33 assertions passed** (97% accuracy)
-- **22.3s cold start**, 12.6s cached
+- **33/33 assertions passed** (100% accuracy)
+- **20.0s cold start**, 12.6s cached
 - **$0.014 per run** (15 questions)
-- **23x speedup** from initial prototype (527s → 22.3s)
+- **26x speedup** from initial prototype (527s → 20.0s)
 
 ### Performance Breakdown
 
@@ -312,7 +312,7 @@ What failed — and what we learned from it:
 | `embedding_model` | `openai/text-embedding-3-large` (via OpenRouter) |
 | `llm_model` | `openai/gpt-4o-mini` (via OpenRouter) |
 | `embedding_dimensions` | 1024 |
-| `bm25_top_k` | 50 |
+| `bm25_top_k` | 30 |
 | `rerank_top_k` | 8 |
 | `embedding_batch_size` | 100 |
 | `embedding_concurrency` | 10 |
