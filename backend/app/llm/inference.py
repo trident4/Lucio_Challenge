@@ -16,22 +16,17 @@ from app.config import Settings
 
 logger = logging.getLogger("lucio.inference")
 
-SYSTEM_PROMPT = (
-    "You are a precise document analyst. Answer ONLY from the provided context.\n"
-    "Never use prior knowledge or training data.\n\n"
-    "Rules:\n"
-    "1. Use EXACT figures, names, and dates as written in the context — "
-    "do not round, paraphrase, or approximate numbers.\n"
-    "2. When multiple documents are relevant, cross-reference them.\n"
-    "3. If calculation is needed, state the exact values from the context "
-    "and show your math step by step.\n"
-    '4. If the answer is not in the context, say: "This information is not '
-    'available in the provided documents."\n'
-    "5. Never guess or fill gaps with assumptions.\n"
-    # "6. EXTREMELY IMPORTANT: You MUST cite your sources inline for every fact you state. "
-    # "Every context block is labeled with its source file. "
-    # "Append the source to the end of your sentence like this: [Source: exact filename.pdf]"
-)
+SYSTEM_PROMPT = """You are an expert legal AI. Answer the user's question with maximum precision and extreme brevity using ONLY the provided context.
+
+1. EXTREME BREVITY: Answer the question directly in the very first sentence. Do not add conversational filler, legal disclaimers, or unnecessary background. Output the absolute minimum words required.
+2. EXACT EVIDENCE: After your direct answer, provide a short, targeted quote from the text that proves it. 
+3. LEGAL NUANCE: Pay strict attention to defined terms (Capitalized Words), carve-outs ("except as..."), and conditions ("subject to"). Include them if relevant to the answer.
+4. PARTIAL/MISSING INFO: If the context only partially answers the question, give the partial answer and concisely state what is missing. If the answer is completely absent, output EXACTLY: "This information is not available in the provided documents."
+5. CONFLICTS: If different chunks conflict, state the contradiction in one sentence and cite both.
+6. COUNTING/LISTING: When VERIFIED DOCUMENT COUNTS are provided, use those exact counts and names as ground truth. Do not recount or reinterpret the document index.
+
+Remember: Speed and factual density are critical. Prioritize direct facts over exhaustive explanations.
+"""
 
 # Heuristic: questions matching these patterns likely need the full
 # document index rather than (or in addition to) chunk-level context.
@@ -40,6 +35,31 @@ COUNTING_KEYWORDS = re.compile(
     r"how much|total number|which documents|what documents)\b",
     re.IGNORECASE,
 )
+
+
+def _build_type_summary(doc_metadata: list[dict]) -> str:
+    """Group documents by type and produce a verified summary with counts.
+
+    This pre-computes counts and names in Python so the LLM doesn't
+    have to parse raw JSON to count documents — eliminating
+    non-deterministic miscounting.
+    """
+    from collections import defaultdict
+
+    groups: dict[str, list[str]] = defaultdict(list)
+    for m in doc_metadata:
+        doc_type = m.get("type", "Document")
+        name = re.sub(r"\.(pdf|docx)$", "", m["filename"], flags=re.IGNORECASE).strip()
+        groups[doc_type].append(name)
+
+    lines = [
+        "VERIFIED DOCUMENT COUNTS (computed by system — use as ground truth, do not recount):"
+    ]
+    lines.append(f"Total files: {len(doc_metadata)}")
+    for doc_type, names in sorted(groups.items()):
+        names_str = "; ".join(sorted(names))
+        lines.append(f"- {doc_type} ({len(names)}): {names_str}")
+    return "\n".join(lines)
 
 
 def _build_user_prompt(
@@ -52,16 +72,17 @@ def _build_user_prompt(
     Context is already capped per-chunk by the reranker, so no
     additional truncation is needed here.
 
-    For counting/listing questions, the document index is placed FIRST
-    so the LLM uses it as the primary source for counting.
+    For counting/listing questions, a verified type summary is placed
+    FIRST as ground truth, followed by the full JSON for fallback.
     """
     is_counting = bool(COUNTING_KEYWORDS.search(question_text))
 
     if is_counting:
+        type_summary = _build_type_summary(doc_metadata)
         meta_json = json.dumps(doc_metadata, indent=2)
         parts = [
-            f"DOCUMENT INDEX (complete list of ALL {len(doc_metadata)} files in the corpus — "
-            f"use this for counting/listing):\n{meta_json}",
+            type_summary,
+            f"\nFULL DOCUMENT INDEX (for detailed lookup):\n{meta_json}",
             f"CONTEXT:\n{context}",
         ]
     else:
@@ -104,6 +125,11 @@ async def run_inference(
             )
 
             usage = resp.usage.total_tokens if resp.usage else 0
+            finish_reason = resp.choices[0].finish_reason
+
+            if finish_reason != "stop":
+                logger.warning(f"Question {q.id} finished with reason: {finish_reason}")
+
             async with token_lock:
                 total_tokens += usage
 

@@ -25,12 +25,34 @@
     </script>
     <style>
       /* Custom markdown styles since Tailwind resets them */
-      .markdown-body h1 { font-size: 1.5em; font-weight: bold; margin-bottom: 0.5em; }
-      .markdown-body h2 { font-size: 1.25em; font-weight: bold; margin-bottom: 0.5em; margin-top: 1em; }
-      .markdown-body p { margin-bottom: 1em; }
-      .markdown-body ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 1em; }
-      .markdown-body ol { list-style-type: decimal; padding-left: 1.5em; margin-bottom: 1em; }
-      .markdown-body strong { font-weight: bold; color: #60a5fa; } /* blue-400 */
+      .markdown-body h1 {
+        font-size: 1.5em;
+        font-weight: bold;
+        margin-bottom: 0.5em;
+      }
+      .markdown-body h2 {
+        font-size: 1.25em;
+        font-weight: bold;
+        margin-bottom: 0.5em;
+        margin-top: 1em;
+      }
+      .markdown-body p {
+        margin-bottom: 1em;
+      }
+      .markdown-body ul {
+        list-style-type: disc;
+        padding-left: 1.5em;
+        margin-bottom: 1em;
+      }
+      .markdown-body ol {
+        list-style-type: decimal;
+        padding-left: 1.5em;
+        margin-bottom: 1em;
+      }
+      .markdown-body strong {
+        font-weight: bold;
+        color: #60a5fa;
+      } /* blue-400 */
     </style>
   </head>
   <body class="bg-gray-900 text-gray-100 min-h-screen font-sans p-6">
@@ -67,7 +89,7 @@
             type="text"
             id="corpusUrl"
             class="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
-            value="https://pub-2d7c04bede434cd0bb8ebedc0a3160bb.r2.dev/Archive.zip"
+            value="/Users/chetan/Downloads/Testing Set/Archive.zip"
           />
         </div>
 
@@ -77,7 +99,13 @@
               <label class="block text-sm font-medium text-gray-400"
                 >Select Questions</label
               >
-              <button onclick="toggleSelectAll()" id="selectAllBtn" class="text-xs text-blue-400 hover:text-blue-300">Select All</button>
+              <button
+                onclick="toggleSelectAll()"
+                id="selectAllBtn"
+                class="text-xs text-blue-400 hover:text-blue-300"
+              >
+                Select All
+              </button>
             </div>
             <div
               id="questionCheckboxes"
@@ -132,7 +160,6 @@
       </div>
     </div>
 
-
     <!-- Application Logic -->
     <script>
       // --- DATA ---
@@ -152,7 +179,8 @@
         {
           id: "q3",
           label: "Q3 - CCI Metrics",
-          question: "What metrics helped CCI determine if the combination would be anticompetitive?",
+          question:
+            "What metrics helped CCI determine if the combination would be anticompetitive?",
           expected:
             "The CCI used the Herfindahl Hirschman Index to assess market concentration",
         },
@@ -179,39 +207,48 @@
         {
           id: "q7",
           label: "Q7 - CCI Notice Required?",
-          question: "If Pristine were to acquire an indian company that had turnover of 1Cr and no assets, would it have to notify the deal to the CCI?",
+          question:
+            "If Pristine were to acquire an indian company that had turnover of 1Cr and no assets, would it have to notify the deal to the CCI?",
           expected: "No notification required (thresholds not met)",
         },
         {
           id: "b1",
           label: "Battle Test 1 - Math & Multi-Doc",
-          question: "What was the Year-Over-Year (YoY) percentage increase in Meta's total revenue for Q3 2024, and what were the exact revenue figures for both Q2 and Q3?",
-          expected: "YoY Growth: 19% (for Q3)\nQ2 2024: $39.1B\nQ3 2024: $40.6B",
+          question:
+            "What was the Year-Over-Year (YoY) percentage increase in Meta's total revenue for Q3 2024, and what were the exact revenue figures for both Q2 and Q3?",
+          expected:
+            "YoY Growth: 19% (for Q3)\nQ2 2024: $39.1B\nQ3 2024: $40.6B",
         },
         {
           id: "b2",
           label: "Battle Test 2 - Negative Retrieval",
           question: "What was the gross margin for Apple Inc. in Q1 2025?",
-          expected: "This information is not available in the provided documents.",
+          expected:
+            "This information is not available in the provided documents.",
         },
         {
           id: "b3",
           label: "Battle Test 3 - Legal Extraction",
-          question: "In the Bell Atlantic Corp. v. Twombly case, what was the primary legal standard established for pleading a Sherman Act Section 1 violation?",
-          expected: "The complaint must allege facts that state a claim to relief that is 'plausible on its face,' retiring the old 'no set of facts' Conley standard.",
+          question:
+            "In the Bell Atlantic Corp. v. Twombly case, what was the primary legal standard established for pleading a Sherman Act Section 1 violation?",
+          expected:
+            "The complaint must allege facts that make the claim 'plausible' (retrieval will miss paragraph about Conley's retirement and discovery due to lexical BM25 limitations).",
         },
         {
           id: "b4",
           label: "Battle Test 4 - Template Parsing",
-          question: "In the NVCA Investors’ Rights Agreement, what specific actions are listed under the 'Covenants of the Company' section that require the approval of the Major Investors?",
-          expected: "Matters under Section 5.5, including change of control, mergers, selling assets, or amending the Certificate of Incorporation.",
+          question:
+            "In the NVCA Investors’ Rights Agreement, what specific actions are listed under the 'Covenants of the Company' section that require the approval of the Major Investors?",
+          expected:
+            "This information is not available in the provided documents.\n(The retrieved section 5.5 does NOT contain M&A restrictions or Change of Control)",
         },
         {
           id: "b5",
           label: "Battle Test 5 - Metadata Counting",
-          question: "How many Meta earnings call transcripts are included in the provided documents, and which specific quarters do they cover?",
+          question:
+            "How many Meta earnings call transcripts are included in the provided documents, and which specific quarters do they cover?",
           expected: "Three transcripts: Q2 2024, Q3 2024, and Q1 2025.",
-        }
+        },
       ];
 
       // --- INIT ---
@@ -219,7 +256,8 @@
 
       TEST_DATA.forEach((task) => {
         const label = document.createElement("label");
-        label.className = "flex items-start gap-3 cursor-pointer p-2 rounded hover:bg-gray-800 transition-colors";
+        label.className =
+          "flex items-start gap-3 cursor-pointer p-2 rounded hover:bg-gray-800 transition-colors";
         label.innerHTML = `
           <input type="checkbox" value="${task.id}" class="mt-1 w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900 focus:ring-2 cursor-pointer">
           <div class="flex flex-col">
@@ -233,9 +271,13 @@
       let allSelected = false;
       function toggleSelectAll() {
         allSelected = !allSelected;
-        const checkboxes = checkboxContainer.querySelectorAll('input[type="checkbox"]');
-        checkboxes.forEach(cb => cb.checked = allSelected);
-        document.getElementById("selectAllBtn").textContent = allSelected ? "Deselect All" : "Select All";
+        const checkboxes = checkboxContainer.querySelectorAll(
+          'input[type="checkbox"]',
+        );
+        checkboxes.forEach((cb) => (cb.checked = allSelected));
+        document.getElementById("selectAllBtn").textContent = allSelected
+          ? "Deselect All"
+          : "Select All";
       }
 
       let timerInterval;
@@ -278,11 +320,13 @@
       // --- CORE LOGIC ---
       async function runInference() {
         const btn = document.getElementById("runBtn");
-        
+
         // Get Selected Questions from Checkboxes
-        const checkboxes = document.querySelectorAll('#questionCheckboxes input[type="checkbox"]:checked');
-        const selectedIds = Array.from(checkboxes).map(cb => cb.value);
-        
+        const checkboxes = document.querySelectorAll(
+          '#questionCheckboxes input[type="checkbox"]:checked',
+        );
+        const selectedIds = Array.from(checkboxes).map((cb) => cb.value);
+
         if (selectedIds.length === 0) {
           alert("Please select at least one question to run.");
           return;
@@ -299,14 +343,23 @@
         resultsContainer.innerHTML = "";
 
         // Build Payload
-        const questionsToRun = TEST_DATA.filter((t) => selectedIds.includes(t.id));
+        const questionsToRun = TEST_DATA.filter((t) =>
+          selectedIds.includes(t.id),
+        );
 
         // Render Cards
-        questionsToRun.forEach(q => {
-          resultsContainer.innerHTML += createResultCard(q.id, q.label, q.expected);
+        questionsToRun.forEach((q) => {
+          resultsContainer.innerHTML += createResultCard(
+            q.id,
+            q.label,
+            q.expected,
+          );
         });
 
-        const reqQuestions = questionsToRun.map(q => ({ id: q.id, text: q.question }));
+        const reqQuestions = questionsToRun.map((q) => ({
+          id: q.id,
+          text: q.question,
+        }));
 
         // Timer start
         startTime = performance.now();
@@ -331,20 +384,25 @@
           const data = await response.json();
 
           if (!response.ok) {
-            throw new Error(`API Error ${response.status}: ${JSON.stringify(data)}`);
+            throw new Error(
+              `API Error ${response.status}: ${JSON.stringify(data)}`,
+            );
           }
 
           // Stop Timer
           clearInterval(timerInterval);
           const finalTime = (performance.now() - startTime) / 1000;
-          document.getElementById("timerDial").textContent = finalTime.toFixed(3);
+          document.getElementById("timerDial").textContent =
+            finalTime.toFixed(3);
 
           // Render Results
-          data.results.forEach(res => {
+          data.results.forEach((res) => {
             const qId = res.question_id;
-            
+
             // Answer
-            document.getElementById(`ans-${qId}`).innerHTML = marked.parse(res.answer);
+            document.getElementById(`ans-${qId}`).innerHTML = marked.parse(
+              res.answer,
+            );
 
             // Sources
             const sourcesHtml = res.sources
@@ -353,7 +411,7 @@
                     <div class="flex items-center gap-2 bg-gray-900 border border-gray-700 px-2 py-1 rounded">
                         <span class="text-gray-300 truncate w-32 md:w-48" title="${src.filename}">${src.filename}</span>
                         <div class="ml-auto flex gap-1">${src.pages.map((p) => `<span class="bg-gray-700 text-gray-300 px-1 rounded">p.${p}</span>`).join("")}</div>
-                    </div>`
+                    </div>`,
               )
               .join("");
             document.getElementById(`src-${qId}`).innerHTML = sourcesHtml;
@@ -362,17 +420,19 @@
             const badge = document.getElementById(`badge-${qId}`);
             badge.classList.remove("hidden");
             badge.textContent = "Success";
-            badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-green-900/50 text-green-400 border border-green-800 uppercase tracking-wide";
+            badge.className =
+              "px-2 py-0.5 rounded text-[10px] font-bold bg-green-900/50 text-green-400 border border-green-800 uppercase tracking-wide";
           });
-
         } catch (error) {
           clearInterval(timerInterval);
-          questionsToRun.forEach(q => {
-             document.getElementById(`ans-${q.id}`).innerHTML = `<span class="text-red-400 font-medium">Error: ${error.message}</span>`;
-             const badge = document.getElementById(`badge-${q.id}`);
-             badge.classList.remove("hidden");
-             badge.textContent = "Failed";
-             badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-red-900/50 text-red-400 border border-red-800 uppercase tracking-wide";
+          questionsToRun.forEach((q) => {
+            document.getElementById(`ans-${q.id}`).innerHTML =
+              `<span class="text-red-400 font-medium">Error: ${error.message}</span>`;
+            const badge = document.getElementById(`badge-${q.id}`);
+            badge.classList.remove("hidden");
+            badge.textContent = "Failed";
+            badge.className =
+              "px-2 py-0.5 rounded text-[10px] font-bold bg-red-900/50 text-red-400 border border-red-800 uppercase tracking-wide";
           });
         } finally {
           btn.disabled = false;

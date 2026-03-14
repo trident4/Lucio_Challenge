@@ -25,7 +25,8 @@ logger = logging.getLogger("lucio.workers")
 CHUNK_SIZE = 2000  # chars per chunk (~500 tokens, ~half a page)
 
 # Document type classification patterns
-SCOTUS_PATTERN = re.compile(r"\d+\s+U\.S\.\s+\d+")
+SCOTUS_PATTERN = re.compile(r"\d+\s+U\.\s*S\.\s+\d+")
+EARNINGS_PATTERN = re.compile(r"earnings|transcript", re.IGNORECASE)
 
 
 def _classify_document(filename: str) -> str:
@@ -36,6 +37,8 @@ def _classify_document(filename: str) -> str:
     """
     if SCOTUS_PATTERN.search(filename):
         return "SCOTUS case"
+    if EARNINGS_PATTERN.search(filename):
+        return "Earnings transcript"
     if " v. " in filename or " v " in filename:
         return "Legal case"
     if filename.lower().endswith(".docx"):
@@ -49,17 +52,23 @@ HEADER_CHARS = 400  # chars from page 1 for identifying the document
 
 def run_extraction(
     file_tuples: list[tuple[str, bytes]],
+    pool: ProcessPoolExecutor | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Run extraction across all CPU cores via ProcessPoolExecutor.
 
     Args:
         file_tuples: List of (filename, raw_bytes) from unzip_to_tuples.
+        pool: Optional pre-created pool to reuse (avoids 2-3s macOS spawn).
 
     Returns:
         (all_chunks, all_metadata) where each worker produces chunks + metadata.
     """
-    with ProcessPoolExecutor(max_workers=os.cpu_count()) as pool:
-        results = list(pool.map(_extract_document_wrapper, file_tuples))
+    _pool = pool or ProcessPoolExecutor(max_workers=os.cpu_count())
+    try:
+        results = list(_pool.map(_extract_document_wrapper, file_tuples))
+    finally:
+        if not pool:
+            _pool.shutdown(wait=False)
 
     all_chunks: list[dict] = []
     all_metadata: list[dict] = []

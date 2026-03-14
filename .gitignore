@@ -15,3 +15,6 @@ __MACOSX/
 
 # Gemini
 .gemini/
+
+# Stress test artifacts
+eval/stress_corpus.zip

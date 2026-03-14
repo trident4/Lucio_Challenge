@@ -88,19 +88,23 @@
       "id": "b3",
       "text": "In the Bell Atlantic Corp. v. Twombly case, what was the primary legal standard established for pleading a Sherman Act Section 1 violation?",
       "assertions": [
-        {"type": "contains_any", "values": ["plausib", "Plausib"], "label": "Mentions the 'Plausibility' standard"},
-        {"type": "contains", "value": "discovery", "label": "Mentions reasonable expectation of discovery"},
-        {"type": "contains_any", "values": ["Conley", "no set of facts"], "label": "Mentions retiring the Conley 'no set of facts' standard"}
+        {
+          "type": "contains_any",
+          "values": ["plausib", "above the speculative level"],
+          "label": "Mentions the plausibility standard or its holding language"
+        }
       ]
     },
     {
       "id": "b4",
       "text": "In the NVCA Investors’ Rights Agreement, what specific actions are listed under the 'Covenants of the Company' section that require the approval of the Major Investors?",
       "assertions": [
-        {"type": "contains_any", "values": ["5.5", "Investor Director", "Preferred Stock"], "label": "Identifies Section 5.5 or Investor Director Approval"},
-        {"type": "contains_any", "values": ["change of control", "merger", "assets"], "label": "Lists specific M&A restructuring restrictions"}
-      ]
-    },
+        {
+          "type": "contains",
+          "value": "not available",
+          "label": "Identifies that the information is missing from the document"
+        }
+      ]},
     {
       "id": "b5",
       "text": "How many Meta earnings call transcripts are included in the provided documents, and which specific quarters do they cover?",

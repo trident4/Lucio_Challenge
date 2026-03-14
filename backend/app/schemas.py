@@ -48,6 +48,8 @@ class ChallengeResponse(BaseModel):
     results: list[Answer]
     total_time: float | None = None
     total_tokens: int | None = None
+    cache_hit: bool | None = None  # True if vector cache was warm
+    phase_times: dict[str, float] | None = None  # Per-phase timing breakdown
 
 
 # ── Internal Data Structures (zero-overhead TypedDicts) ─────────────────────
