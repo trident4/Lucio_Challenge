@@ -18,7 +18,7 @@ from app.assembly.assembler import assemble_response
 from app.config import Settings
 from app.embeddings.embedder import embed_and_cache, embed_questions
 from app.extraction.fetcher import fetch_corpus, unzip_to_tuples
-from app.extraction.workers import run_extraction
+from app.extraction.workers import deduplicate_scanned, extract_document, run_extraction
 from app.llm.inference import run_inference
 from app.reranker.reranker import rerank_all
 from app.reranker.compressor import compress_context
@@ -36,20 +36,29 @@ logger = logging.getLogger("lucio")
 # ── Sync extraction pipeline (runs in thread executor) ─────────────────────
 
 
-def _extract_pipeline(corpus_source: str) -> tuple[list[dict], list[dict], object, dict]:
-    """All sync work in one executor call: unzip → extract → index.
+def _extract_pipeline(
+    corpus_source: str, password: str | None = None,
+) -> tuple[list[dict], list[dict], object, dict[str, bytes], dict]:
+    """All sync work in one executor call: unzip → dedup → extract → index.
 
     Keeps the event loop free for concurrent question embedding.
+    Returns (chunks, metadata, index, scanned_file_bytes, timing_dict).
     """
     t0 = time.perf_counter()
-    file_tuples = unzip_to_tuples(corpus_source)
+    file_tuples = unzip_to_tuples(corpus_source, password=password)
+    file_tuples = deduplicate_scanned(file_tuples)
     t1 = time.perf_counter()
     chunks, metadata = run_extraction(file_tuples, pool=process_pool)
-    del file_tuples  # Free ~1GB of raw bytes
+    # Preserve bytes for scanned files (needed by background OCR)
+    scanned_file_bytes = {
+        fn: fb for fn, fb in file_tuples
+        if any(m["filename"] == fn and m.get("scanned_pages") for m in metadata)
+    }
+    del file_tuples  # Free raw bytes (scanned copies retained above)
     t2 = time.perf_counter()
     index = build_index(chunks)
     t3 = time.perf_counter()
-    return chunks, metadata, index, {
+    return chunks, metadata, index, scanned_file_bytes, {
         "unzip": round(t1 - t0, 3),
         "extract": round(t2 - t1, 3),
         "index": round(t3 - t2, 3),
@@ -136,6 +145,45 @@ app = FastAPI(title="Lucio Speedrun", lifespan=lifespan)
 # Mount the static directory for the testing UI at /ui/
 app.mount("/ui", StaticFiles(directory="static", html=True), name="static")
 
+# ── Background OCR ─────────────────────────────────────────────────────────
+
+
+async def _background_ocr(
+    corpus_url: str,
+    metadata: list[dict],
+    scanned_file_bytes: dict[str, bytes],
+    ocr_config: dict,
+):
+    """OCR scanned PDFs in background, update corpus cache when done."""
+    for meta in metadata:
+        scanned = meta.get("scanned_pages", [])
+        if not scanned or meta["filename"] not in scanned_file_bytes:
+            continue
+
+        filename = meta["filename"]
+        file_bytes = scanned_file_bytes[filename]
+        logger.info(f"Background OCR: {filename} ({len(scanned)} pages)")
+
+        try:
+            loop = asyncio.get_event_loop()
+            new_chunks, _ = await loop.run_in_executor(
+                None, extract_document, filename, file_bytes, ocr_config
+            )
+
+            async with corpus_lock:
+                if corpus_url in corpus_cache:
+                    cache = corpus_cache[corpus_url]
+                    cache["chunks"].extend(new_chunks)
+                    cache["metadata"] = [
+                        {**m, "scanned_pages": []} if m["filename"] == filename else m
+                        for m in cache["metadata"]
+                    ]
+                    cache["index"] = build_index(cache["chunks"])
+                    logger.info(f"Background OCR done: +{len(new_chunks)} chunks for {filename}")
+        except Exception as e:
+            logger.warning(f"Background OCR failed for {filename}: {e}")
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────────
 
 
@@ -184,8 +232,10 @@ async def challenge_run(req: ChallengeRequest, request: Request):
             corpus_source = await fetch_corpus(req.corpus_url)
             try:
                 loop = asyncio.get_event_loop()
-                chunks, metadata, index, pipeline_times = await loop.run_in_executor(
-                    None, _extract_pipeline, corpus_source
+                chunks, metadata, index, scanned_file_bytes, pipeline_times = (
+                    await loop.run_in_executor(
+                        None, _extract_pipeline, corpus_source, req.password,
+                    )
                 )
             finally:
                 if corpus_source != req.corpus_url:
@@ -208,6 +258,16 @@ async def challenge_run(req: ChallengeRequest, request: Request):
                 "metadata": metadata,
                 "index": index,
             }
+
+            # Fire background OCR for unique scanned PDFs (after cache is set)
+            if scanned_file_bytes and settings.openrouter_api_key:
+                ocr_config = {
+                    "api_key": settings.openrouter_api_key,
+                    "base_url": settings.openrouter_base_url,
+                }
+                asyncio.create_task(
+                    _background_ocr(req.corpus_url, metadata, scanned_file_bytes, ocr_config)
+                )
 
     # ── Phase 3: Retrieve + Embed ───────────────────────────────────────
     search_results = await search_all(index, req.questions, settings.bm25_top_k)

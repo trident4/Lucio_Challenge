@@ -6,12 +6,11 @@ Two-stage reranking:
 
 Then enrich with context:
 - Prose (PDF/DOCX): ±1 neighboring chunks for continuity
-- Tabular (XLSX): no neighbors (avoids 3× duplication), sheet name labels instead
+- Tabular (XLSX): include matched chunk with sheet name label
 """
 
 import logging
 import re
-from collections import defaultdict
 
 import numpy as np
 
@@ -36,7 +35,8 @@ def rerank_all(
     2. Embedding rank from cosine similarity (dot product on L2-normed vecs)
     3. RRF score = 1/(K + bm25_rank) + 1/(K + embed_rank)
     4. Select top_k by RRF score
-    5. Attach ±1 neighbor chunks for context continuity
+    5. Prose: ±1 neighbor chunks for context continuity
+    6. XLSX: include chunk with sheet name label
 
     Returns:
         Dict mapping question_id -> {context, sources}
@@ -113,7 +113,7 @@ def rerank_all(
                     }
                 )
 
-        # ── Build context with ±1 neighbor enrichment ──
+        # ── Build context with neighbor enrichment ──
         context_parts = []
 
         # Headers first (document intros)
@@ -128,10 +128,6 @@ def rerank_all(
             filename = c["filename"]
 
             if filename.lower().endswith(".xlsx"):
-                # XLSX: no neighbor expansion — consecutive xlsx chunks in top-K
-                # cause each chunk to appear ~3× via overlapping ±1 windows,
-                # tripling context size with duplicate table rows.
-                # Instead, label with sheet name so LLM can orient.
                 sheet_name = _extract_sheet_name(c.get("text", ""))
                 prefix = f"Sheet: {sheet_name}\n\n" if sheet_name else ""
                 context_parts.append(

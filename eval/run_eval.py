@@ -50,11 +50,11 @@ CHECKERS = {
 # ── Main ────────────────────────────────────────────────────────────────────
 
 
-def run_eval(api_url: str, corpus_url: str) -> dict:
+def run_eval(api_url: str, corpus_url: str, password: str = "", gt_path: Path = GROUND_TRUTH) -> dict:
     """Run evaluation and return results dict."""
 
     # Load ground truth
-    with open(GROUND_TRUTH) as f:
+    with open(gt_path) as f:
         gt = json.load(f)
 
     # Override corpus URL if provided
@@ -66,6 +66,8 @@ def run_eval(api_url: str, corpus_url: str) -> dict:
         "corpus_url": gt["corpus_url"],
         "questions": [{"id": q["id"], "text": q["text"]} for q in gt["questions"]],
     }
+    if password:
+        payload["password"] = password
 
     print(
         f"🚀 Sending {len(payload['questions'])} questions to {api_url}/challenge/run"
@@ -261,17 +263,68 @@ def run_eval(api_url: str, corpus_url: str) -> dict:
     with open(report_path, "w") as f:
         f.write("\n".join(lines))
 
+    # ── Generate Submission JSON ─────────────────────────────────────
+
+    submission = {
+        "answers": [
+            {
+                "question_id": q["id"],
+                "answer": answers[q["id"]]["answer"],
+                "citations": answers[q["id"]].get("sources", []),
+            }
+            for q in gt["questions"]
+            if q["id"] in answers
+        ]
+    }
+    submission_path = EVAL_DIR / "submission.json"
+    with open(submission_path, "w") as f:
+        json.dump(submission, f, indent=2)
+
     print(f"\n📝 Results saved to {HISTORY_FILE}")
     print(f"📄 Report saved to {report_path}")
+    print(f"📤 Submission saved to {submission_path}")
     print(f"   Commit: {commit} ({branch})")
 
     return history_entry
+
+
+def submit_answers(submit_url: str) -> None:
+    """POST submission.json to the submission API."""
+    submission_path = EVAL_DIR / "submission.json"
+    if not submission_path.exists():
+        print("❌ No submission.json found. Run eval first.")
+        sys.exit(1)
+
+    with open(submission_path) as f:
+        payload = json.load(f)
+
+    print(f"\n📤 Submitting {len(payload.get('answers', []))} answers to {submit_url}")
+    try:
+        req = Request(
+            submit_url,
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(req, timeout=60) as resp:
+            result = json.loads(resp.read())
+        print(f"✅ Submission response:")
+        print(json.dumps(result, indent=2))
+    except URLError as e:
+        print(f"❌ Submission failed: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="RAG Pipeline Eval Runner")
     parser.add_argument("--api", default="http://127.0.0.1:8000", help="API base URL")
     parser.add_argument("--corpus", default="", help="Override corpus path")
+    parser.add_argument("--password", default="", help="Password for encrypted zip files")
+    parser.add_argument("--ground-truth", default=str(GROUND_TRUTH), help="Path to ground truth JSON (default: ground_truth.json)")
+    parser.add_argument("--submit", default="", help="Submission API URL — POST answers after eval")
     args = parser.parse_args()
 
-    run_eval(args.api, args.corpus)
+    run_eval(args.api, args.corpus, args.password, gt_path=Path(args.ground_truth))
+
+    if args.submit:
+        submit_answers(args.submit)

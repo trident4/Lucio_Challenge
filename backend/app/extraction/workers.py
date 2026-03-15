@@ -11,12 +11,15 @@ Chunks are small and focused (~half a page) so that:
 - Full chunk text can be sent to the LLM without truncation
 """
 
+import base64
 import datetime
 import io
 import logging
 import os
 import re
-from concurrent.futures import ProcessPoolExecutor
+from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from itertools import combinations
 
 import docx
 import fitz  # PyMuPDF
@@ -26,6 +29,17 @@ logger = logging.getLogger("lucio.workers")
 
 # Chunking parameters — small, focused chunks for precise retrieval
 CHUNK_SIZE = 2000  # chars per chunk (~500 tokens, ~half a page)
+
+# OCR parameters for scanned PDFs
+SCANNED_THRESHOLD = 50  # chars — pages with less text are considered scanned
+OCR_MODEL = "google/gemini-2.0-flash-001"
+OCR_DPI = 72   # lowest readable DPI — fewer image tokens = faster processing
+OCR_MAX_PAGES = 15  # cap pages to keep OCR under ~10s
+OCR_MAX_WORKERS = 15  # match max pages
+OCR_TIMEOUT = 15.0
+
+# Filename normalization: strip leading "4. " or "11. " numbering prefixes
+_LEADING_JUNK = re.compile(r'^[\d.\s\-_]+')
 
 # Document type classification patterns
 SCOTUS_PATTERN = re.compile(r"\d+\s+U\.\s*S\.\s+\d+")
@@ -53,6 +67,54 @@ def _classify_document(filename: str) -> str:
 
 CHUNK_OVERLAP = 200  # chars overlap between chunks
 HEADER_CHARS = 400  # chars from page 1 for identifying the document
+
+
+def deduplicate_scanned(
+    file_tuples: list[tuple[str, bytes]],
+) -> list[tuple[str, bytes]]:
+    """Remove scanned PDFs that have a digital twin in the corpus.
+
+    For each PDF, quick-checks page 1 text. If < SCANNED_THRESHOLD chars,
+    it's a scanned candidate. Groups by normalized filename (stripping
+    leading numbering like "4. "). If a group has both scanned and digital
+    versions, drops the scanned one.
+    """
+    pdf_info: list[tuple[str, bytes, str, bool]] = []  # (filename, bytes, norm_name, is_scanned)
+
+    for filename, file_bytes in file_tuples:
+        if not filename.lower().endswith(".pdf"):
+            continue
+        norm = _LEADING_JUNK.sub('', filename)
+        try:
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            text = doc.load_page(0).get_text() if len(doc) > 0 else ""
+            doc.close()
+            is_scanned = len(text.strip()) < SCANNED_THRESHOLD
+        except Exception:
+            is_scanned = False
+        pdf_info.append((filename, file_bytes, norm, is_scanned))
+
+    # Group by normalized name
+    groups: dict[str, list[tuple[str, bool]]] = {}
+    for filename, _, norm, is_scanned in pdf_info:
+        groups.setdefault(norm, []).append((filename, is_scanned))
+
+    # Find scanned PDFs that have a digital twin
+    skip = set()
+    for norm, members in groups.items():
+        if len(members) < 2:
+            continue
+        has_digital = any(not s for _, s in members)
+        if has_digital:
+            for fn, is_scanned in members:
+                if is_scanned:
+                    twin = next(f for f, s in members if not s)
+                    logger.info(f"Skipping scanned duplicate: {fn} (twin: {twin})")
+                    skip.add(fn)
+
+    if skip:
+        return [(fn, fb) for fn, fb in file_tuples if fn not in skip]
+    return file_tuples
 
 
 def run_extraction(
@@ -87,13 +149,15 @@ def run_extraction(
     return all_chunks, all_metadata
 
 
-def _extract_document_wrapper(args: tuple[str, bytes]) -> tuple[list[dict], dict]:
+def _extract_document_wrapper(args: tuple) -> tuple[list[dict], dict]:
     """Wrapper to unpack tuple for pool.map (which passes single arg)."""
     filename, file_bytes = args
     return extract_document(filename, file_bytes)
 
 
-def extract_document(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
+def extract_document(
+    filename: str, file_bytes: bytes, ocr_config: dict | None = None,
+) -> tuple[list[dict], dict]:
     """Dispatch extraction based on file extension.
 
     Returns:
@@ -101,7 +165,7 @@ def extract_document(filename: str, file_bytes: bytes) -> tuple[list[dict], dict
     """
     ext = os.path.splitext(filename.lower())[1]
     if ext == ".pdf":
-        return _extract_pdf(filename, file_bytes)
+        return _extract_pdf(filename, file_bytes, ocr_config)
     elif ext == ".docx":
         return _extract_docx(filename, file_bytes)
     elif ext == ".xlsx":
@@ -113,11 +177,16 @@ def extract_document(filename: str, file_bytes: bytes) -> tuple[list[dict], dict
 # ── PDF Extraction ──────────────────────────────────────────────────────────
 
 
-def _extract_pdf(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
+def _extract_pdf(
+    filename: str, file_bytes: bytes, ocr_config: dict | None = None,
+) -> tuple[list[dict], dict]:
     """Extract text from a PDF using PyMuPDF layout mode.
 
     Extracts each page's text, then splits into ~2000-char chunks
     with 200-char overlap. Tracks which page(s) each chunk spans.
+
+    For scanned pages (< SCANNED_THRESHOLD chars), falls back to
+    vision-based OCR via API if ocr_config is provided.
     """
     doc = fitz.open(stream=file_bytes, filetype="pdf")
     page_count = len(doc)
@@ -126,6 +195,24 @@ def _extract_pdf(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
     page_texts: list[str] = []
     for page in doc:
         page_texts.append(page.get_text("layout"))
+
+    # Detect scanned pages
+    scanned = [i for i, t in enumerate(page_texts) if len(t.strip()) < SCANNED_THRESHOLD]
+    if ocr_config and scanned:
+        # Background OCR path: actually perform OCR
+        if len(scanned) > OCR_MAX_PAGES:
+            logger.info(
+                f"{filename}: {len(scanned)} scanned pages, capping OCR to first {OCR_MAX_PAGES}"
+            )
+            scanned = scanned[:OCR_MAX_PAGES]
+        logger.info(f"{filename}: OCR {len(scanned)}/{page_count} scanned pages")
+        ocr_texts = _ocr_scanned_pages(doc, scanned, ocr_config)
+        for i, text in zip(scanned, ocr_texts):
+            page_texts[i] = text
+        scanned = []  # OCR done, no longer scanned
+    elif scanned:
+        # Extraction path: flag scanned pages, defer OCR to background
+        logger.info(f"{filename}: {len(scanned)}/{page_count} scanned pages (OCR deferred to background)")
 
     # Header: first 400 chars of page 1, sanitized
     header = _sanitize_header(page_texts[0][:HEADER_CHARS] if page_texts else "")
@@ -154,8 +241,87 @@ def _extract_pdf(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
         "title": title,
         "type": _classify_document(filename),
         "page_count": page_count,
+        "scanned_pages": scanned,
     }
     return chunks, metadata
+
+
+def _ocr_scanned_pages(
+    doc, page_indices: list[int], ocr_config: dict,
+) -> list[str]:
+    """OCR scanned pages by sending each page image to a vision LLM.
+
+    Fires all API calls concurrently via ThreadPoolExecutor — the calls
+    are I/O-bound so 30+ in-flight requests complete in ~13-15s total
+    regardless of page count.
+    """
+    import httpx
+
+    api_key = ocr_config["api_key"]
+    base_url = ocr_config["base_url"]
+    model = ocr_config.get("model", OCR_MODEL)
+
+    # Render pages to base64 JPEG (3-5x smaller than PNG for scanned docs)
+    page_images: list[tuple[int, str]] = []
+    for idx in page_indices:
+        pix = doc[idx].get_pixmap(dpi=OCR_DPI)
+        b64 = base64.b64encode(pix.tobytes("jpeg")).decode()
+        page_images.append((idx, b64))
+
+    logger.info(f"OCR: {len(page_images)} pages at {OCR_DPI} DPI")
+
+    def _ocr_one(args: tuple[int, str]) -> tuple[int, str]:
+        page_idx, b64_image = args
+        try:
+            resp = httpx.post(
+                f"{base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "Extract ALL text from this document page "
+                                    "exactly as written. Preserve headings, "
+                                    "paragraphs, and structure. Output only "
+                                    "the extracted text."
+                                ),
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{b64_image}",
+                                },
+                            },
+                        ],
+                    }],
+                    "max_tokens": 4000,
+                    "temperature": 0.0,
+                },
+                timeout=OCR_TIMEOUT,
+            )
+            resp.raise_for_status()
+            return page_idx, resp.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            logger.warning(f"OCR failed for page {page_idx + 1}: {e}")
+            return page_idx, ""
+
+    workers = min(len(page_images), OCR_MAX_WORKERS)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(_ocr_one, page_images))
+
+    results.sort(key=lambda x: x[0])
+    texts = [text for _, text in results]
+
+    ocr_chars = sum(len(t) for t in texts)
+    logger.info(f"OCR complete: {ocr_chars:,d} chars from {len(texts)} pages")
+    return texts
 
 
 # ── DOCX Extraction ─────────────────────────────────────────────────────────
@@ -194,12 +360,230 @@ def _extract_docx(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
 
 # ── XLSX Extraction ─────────────────────────────────────────────────────────
 
+_AGGREGATE_ROW_RE = re.compile(r'\b(Total|Net|Free|Gross|Operating|Grand)\b', re.IGNORECASE)
+MAX_CROSSTAB_ROWS = 50
+
+
+def _detect_dimensions_and_measures(
+    header_row: tuple, data_rows: list[tuple], col_start: int, col_end: int,
+) -> tuple[list[tuple], list[tuple]]:
+    """Auto-detect categorical dimensions vs numeric measures.
+
+    Dimension: text column with ≤20 unique values that REPEAT (unique/total ≤ 50%).
+    Measure: purely numeric column.
+    """
+    dimensions = []  # (col_idx, col_name, sorted_unique_values)
+    measures = []    # (col_idx, col_name)
+
+    for col_idx in range(col_start, col_end + 1):
+        col_name = _format_cell(header_row[col_idx])
+        numeric_count = 0
+        text_values = set()
+
+        for row in data_rows:
+            val = row[col_idx] if col_idx < len(row) else None
+            if val is None:
+                continue
+            if isinstance(val, (int, float)):
+                numeric_count += 1
+            else:
+                text_values.add(str(val).strip())
+
+        if text_values and numeric_count == 0:
+            unique_ratio = len(text_values) / len(data_rows) if data_rows else 1
+            if len(text_values) <= 20 and unique_ratio <= 0.5:
+                dimensions.append((col_idx, col_name, sorted(text_values)))
+        elif numeric_count > 0 and not text_values:
+            measures.append((col_idx, col_name))
+
+    return dimensions, measures
+
+
+def _build_sheet_summary(
+    ws_title: str, header_row: tuple, data_rows: list[tuple],
+    col_start: int, col_end: int,
+    dimensions: list[tuple], measures: list[tuple],
+) -> str:
+    """Build a summary chunk for one sheet.
+
+    For dimensional sheets: lists unique values per dimension.
+    For non-dimensional sheets: lists row labels and key aggregate metrics.
+    """
+    col_names = [_format_cell(header_row[i]) for i in range(col_start, col_end + 1)]
+    lines = [
+        f"SHEET SUMMARY: {ws_title} | {len(data_rows)} data rows",
+        f"Columns: {' | '.join(col_names)}",
+        "",
+    ]
+
+    if dimensions:
+        # Dimensional sheet — list unique values per dimension
+        lines.append("Unique values:")
+        for _, dim_name, unique_vals in dimensions:
+            lines.append(f"- {dim_name} ({len(unique_vals)}): {', '.join(unique_vals)}")
+    else:
+        # Non-dimensional sheet — row labels + key metrics
+        first_col_idx = col_start
+        row_labels = []
+        for row in data_rows:
+            val = row[first_col_idx] if first_col_idx < len(row) else None
+            if val is not None:
+                row_labels.append(str(val).strip())
+
+        if row_labels and len(row_labels) <= 30:
+            lines.append(f"Row labels ({len(row_labels)}): {', '.join(row_labels)}")
+            lines.append("")
+
+        # Key metrics: find aggregate rows and report last numeric column value
+        last_measure_idx = None
+        last_measure_name = None
+        for col_idx in range(col_end, col_start - 1, -1):
+            has_numeric = any(
+                isinstance(row[col_idx] if col_idx < len(row) else None, (int, float))
+                for row in data_rows
+            )
+            if has_numeric:
+                last_measure_idx = col_idx
+                last_measure_name = _format_cell(header_row[col_idx])
+                break
+
+        if last_measure_idx is not None:
+            agg_metrics = []
+            for row in data_rows:
+                label_val = row[first_col_idx] if first_col_idx < len(row) else None
+                if label_val is None:
+                    continue
+                label = str(label_val).strip()
+                if _AGGREGATE_ROW_RE.search(label):
+                    metric_val = row[last_measure_idx] if last_measure_idx < len(row) else None
+                    if metric_val is not None:
+                        agg_metrics.append((label, _format_cell(metric_val)))
+            if agg_metrics:
+                lines.append(f"Key metrics ({last_measure_name}):")
+                for label, val in agg_metrics:
+                    lines.append(f"- {label}: {val}")
+
+    return "\n".join(lines)
+
+
+def _build_aggregation_chunks(
+    dimensions: list[tuple], measures: list[tuple],
+    header_row: tuple, data_rows: list[tuple],
+    col_start: int, col_end: int,
+    filename: str, header_tag: str, ws_title: str,
+    sheet_num: int, start_chunk_idx: int,
+) -> tuple[list[dict], int]:
+    """Build pre-computed aggregation chunks for dimensional sheets.
+
+    Generates single-dimension totals and two-way cross-tabs.
+    Excludes subtotal rows (matching _AGGREGATE_ROW_RE) to prevent double-counting.
+    """
+    # Filter out subtotal rows
+    agg_rows = [
+        row for row in data_rows
+        if not any(
+            isinstance(row[d_idx] if d_idx < len(row) else None, str)
+            and _AGGREGATE_ROW_RE.search(str(row[d_idx]))
+            for d_idx, _, _ in dimensions
+        )
+    ]
+
+    all_chunks: list[dict] = []
+    chunk_idx = start_chunk_idx
+
+    # Single-dimension totals
+    for d_idx, d_name, d_vals in dimensions:
+        groups: dict[str, list[tuple]] = defaultdict(list)
+        for row in agg_rows:
+            key = str(row[d_idx]).strip() if d_idx < len(row) and row[d_idx] is not None else ""
+            if key:
+                groups[key].append(row)
+
+        # Build aggregated rows
+        agg_header_cells = [d_name] + [m_name for _, m_name in measures]
+        agg_md_header = "| " + " | ".join(agg_header_cells) + " |\n"
+        agg_md_header += "| " + " | ".join("---" for _ in agg_header_cells) + " |"
+
+        agg_data_rows = []
+        for val in sorted(groups.keys()):
+            row_cells = [val]
+            for m_idx, _ in measures:
+                total = sum(
+                    r[m_idx] for r in groups[val]
+                    if m_idx < len(r) and isinstance(r[m_idx], (int, float))
+                )
+                row_cells.append(_format_cell(total))
+            agg_data_rows.append("| " + " | ".join(row_cells) + " |")
+
+        content = f"AGGREGATION: {ws_title} — Totals by {d_name}\n{agg_md_header}\n" + "\n".join(agg_data_rows)
+
+        if len(content) <= CHUNK_SIZE:
+            all_chunks.append(_make_chunk(filename, header_tag, content, [sheet_num], chunk_idx))
+            chunk_idx += 1
+        else:
+            # Split large aggregation tables
+            sub_rows = [tuple(c.strip() for c in r.strip("| ").split("|")) for r in agg_data_rows]
+            sub_chunks = _split_table_into_chunks(
+                sub_rows, agg_md_header, header_tag, filename,
+                0, len(agg_header_cells) - 1, sheet_num, chunk_idx,
+            )
+            chunk_idx += len(sub_chunks)
+            all_chunks.extend(sub_chunks)
+
+    # Two-way cross-tabs (only when 2+ dimensions)
+    if len(dimensions) >= 2:
+        for (d1_idx, d1_name, d1_vals), (d2_idx, d2_name, d2_vals) in combinations(dimensions, 2):
+            max_rows = len(d1_vals) * len(d2_vals)
+            if max_rows > MAX_CROSSTAB_ROWS:
+                logger.info(f"Skipping cross-tab {d1_name}×{d2_name}: {max_rows} rows exceeds cap")
+                continue
+
+            groups: dict[tuple[str, str], list[tuple]] = defaultdict(list)
+            for row in agg_rows:
+                k1 = str(row[d1_idx]).strip() if d1_idx < len(row) and row[d1_idx] is not None else ""
+                k2 = str(row[d2_idx]).strip() if d2_idx < len(row) and row[d2_idx] is not None else ""
+                if k1 and k2:
+                    groups[(k1, k2)].append(row)
+
+            ct_header_cells = [d1_name, d2_name] + [m_name for _, m_name in measures]
+            ct_md_header = "| " + " | ".join(ct_header_cells) + " |\n"
+            ct_md_header += "| " + " | ".join("---" for _ in ct_header_cells) + " |"
+
+            ct_data_rows = []
+            for (v1, v2) in sorted(groups.keys()):
+                row_cells = [v1, v2]
+                for m_idx, _ in measures:
+                    total = sum(
+                        r[m_idx] for r in groups[(v1, v2)]
+                        if m_idx < len(r) and isinstance(r[m_idx], (int, float))
+                    )
+                    row_cells.append(_format_cell(total))
+                ct_data_rows.append("| " + " | ".join(row_cells) + " |")
+
+            content = f"AGGREGATION: {ws_title} — Totals by {d1_name} × {d2_name}\n{ct_md_header}\n" + "\n".join(ct_data_rows)
+
+            if len(content) <= CHUNK_SIZE:
+                all_chunks.append(_make_chunk(filename, header_tag, content, [sheet_num], chunk_idx))
+                chunk_idx += 1
+            else:
+                sub_rows = [tuple(c.strip() for c in r.strip("| ").split("|")) for r in ct_data_rows]
+                sub_chunks = _split_table_into_chunks(
+                    sub_rows, ct_md_header, header_tag, filename,
+                    0, len(ct_header_cells) - 1, sheet_num, chunk_idx,
+                )
+                chunk_idx += len(sub_chunks)
+                all_chunks.extend(sub_chunks)
+
+    return all_chunks, chunk_idx
+
 
 def _extract_xlsx(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
     """Extract tabular data from an Excel workbook as markdown table chunks.
 
-    Each sheet is converted to a markdown table and split into chunks
-    that respect row boundaries. The header row is repeated in every chunk.
+    Each sheet produces:
+    1. A summary chunk (column headers, row count, key metrics or unique values)
+    2. Aggregation chunks (pre-computed totals for dimensional sheets)
+    3. Data chunks (existing markdown table chunks with header repetition)
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
 
@@ -220,6 +604,29 @@ def _extract_xlsx(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
         md_header = _make_md_header(header_row, col_start, col_end)
         header_tag = f"Excel: {filename} | Sheet: {ws.title}"
 
+        # 1. Detect structure
+        dimensions, measures = _detect_dimensions_and_measures(
+            header_row, data_rows, col_start, col_end,
+        )
+
+        # 2. Summary chunk (always first)
+        summary = _build_sheet_summary(
+            ws.title, header_row, data_rows, col_start, col_end,
+            dimensions, measures,
+        )
+        all_chunks.append(_make_chunk(filename, header_tag, summary, [sheet_num], chunk_idx))
+        chunk_idx += 1
+
+        # 3. Aggregation chunks (for sheets with dimensions + measures)
+        if dimensions and measures:
+            agg_chunks, chunk_idx = _build_aggregation_chunks(
+                dimensions, measures, header_row, data_rows,
+                col_start, col_end, filename, header_tag, ws.title,
+                sheet_num, chunk_idx,
+            )
+            all_chunks.extend(agg_chunks)
+
+        # 4. Data chunks (existing logic, unchanged)
         chunks = _split_table_into_chunks(
             data_rows, md_header, header_tag, filename, col_start, col_end,
             sheet_num, chunk_idx,

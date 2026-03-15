@@ -1,0 +1,842 @@
+{
+  "answers": [
+    {
+      "question_id": "1",
+      "answer": "The main alternative to SUMO for academic research is MATSim, which uses an agent-based approach to model individual travel behavior, unlike SUMO's focus on macroscopic traffic flow modeling. \n\n\"While SUMO focuses on macroscopic traffic flow modeling, MATSim uses an agent-based approach to model individual travel behavior [145].\"",
+      "citations": [
+        {
+          "document_id": "Deep_Learning_in_Leaf_Disease_Detection_20142024_A_Visualization-Based_Bibliometric_Analysis.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "Deep_Learning_in_Leaf_Disease_Detection_20142024_A_Visualization-Based_Bibliometric_Analysis.pdf",
+          "page": 2
+        },
+        {
+          "document_id": "Deep_Learning_in_Leaf_Disease_Detection_20142024_A_Visualization-Based_Bibliometric_Analysis.pdf",
+          "page": 3
+        },
+        {
+          "document_id": "Taylor-Root-Singapore-law-firm-salary-guide-2023-2024-6.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "Taylor-Root-Singapore-law-firm-salary-guide-2023-2024-6.pdf",
+          "page": 9
+        },
+        {
+          "document_id": "Machine_Learning_With_Computer_Networks_Techniques_Datasets_and_Models.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "Machine_Learning_With_Computer_Networks_Techniques_Datasets_and_Models.pdf",
+          "page": 2
+        },
+        {
+          "document_id": "Machine_Learning_With_Computer_Networks_Techniques_Datasets_and_Models.pdf",
+          "page": 16
+        },
+        {
+          "document_id": "Machine_Learning_With_Computer_Networks_Techniques_Datasets_and_Models.pdf",
+          "page": 17
+        },
+        {
+          "document_id": "Machine_Learning_With_Computer_Networks_Techniques_Datasets_and_Models.pdf",
+          "page": 19
+        },
+        {
+          "document_id": "Quantum_Computing_Fundamentals_Implementations_and_Applications.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "Quantum_Computing_Fundamentals_Implementations_and_Applications.pdf",
+          "page": 17
+        }
+      ]
+    },
+    {
+      "question_id": "2",
+      "answer": "Ahmedabad has the highest value of 885752 in the Banking Transactions dataset. \n\n\"2022-08-04 | MEDICAL | Ahmedabad | 885752 | 1485\"",
+      "citations": [
+        {
+          "document_id": "1644915066679.PDF",
+          "page": 1
+        },
+        {
+          "document_id": "1644915066679.PDF",
+          "page": 162
+        },
+        {
+          "document_id": "1644915066679.PDF",
+          "page": 163
+        },
+        {
+          "document_id": "1644915066679.PDF",
+          "page": 398
+        },
+        {
+          "document_id": "1644915066679.PDF",
+          "page": 399
+        },
+        {
+          "document_id": "1644915066679.PDF",
+          "page": 400
+        },
+        {
+          "document_id": "Banking Transactions.xlsx",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "question_id": "3",
+      "answer": "The KMIL Amendment was executed in Mumbai on February 9, 2021. \n\n\"Amendment Deed to Debenture Trust Deed dated 3th October 2019... made at Mumbay on this the 9th day of February, 2021.\"",
+      "citations": [
+        {
+          "document_id": "1658137325541.PDF",
+          "page": 1
+        },
+        {
+          "document_id": "1658137325541.PDF",
+          "page": 234
+        },
+        {
+          "document_id": "1651746906727.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1651746906727.pdf",
+          "page": 189
+        },
+        {
+          "document_id": "KMIL DTD amendment.pdf.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "KMIL DTD amendment.pdf.pdf",
+          "page": 2
+        },
+        {
+          "document_id": "KMIL DTD amendment.pdf.pdf",
+          "page": 3
+        },
+        {
+          "document_id": "KMIL DTD amendment.pdf.pdf",
+          "page": 5
+        },
+        {
+          "document_id": "KMIL DTD amendment.pdf.pdf",
+          "page": 6
+        },
+        {
+          "document_id": "KMIL DTD amendment.pdf.pdf",
+          "page": 7
+        }
+      ]
+    },
+    {
+      "question_id": "4",
+      "answer": "The subject taught on Wednesdays between 10:20 and 11:10 is \"Remedial.\" \n\n\"10:20-11:10 Remedial\"",
+      "citations": [
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 226
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 227
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 228
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 229
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 235
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 236
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 237
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 243
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 244
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 245
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 247
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 248
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 249
+        },
+        {
+          "document_id": "TABLES.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "TABLES.pdf",
+          "page": 2
+        },
+        {
+          "document_id": "TABLES.pdf",
+          "page": 3
+        }
+      ]
+    },
+    {
+      "question_id": "5",
+      "answer": "This information is not available in the provided documents.",
+      "citations": [
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 15
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 16
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 17
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 18
+        },
+        {
+          "document_id": "1646902016643.PDF",
+          "page": 1
+        },
+        {
+          "document_id": "1646902016643.PDF",
+          "page": 378
+        },
+        {
+          "document_id": "1646902016643.PDF",
+          "page": 402
+        },
+        {
+          "document_id": "1649217556348.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1649217556348.pdf",
+          "page": 161
+        },
+        {
+          "document_id": "1644925771350.PDF",
+          "page": 1
+        },
+        {
+          "document_id": "1644925771350.PDF",
+          "page": 230
+        },
+        {
+          "document_id": "1644925771350.PDF",
+          "page": 231
+        },
+        {
+          "document_id": "1651746906727.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1651746906727.pdf",
+          "page": 156
+        },
+        {
+          "document_id": "1655725396233.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1655725396233.pdf",
+          "page": 124
+        },
+        {
+          "document_id": "1655725396233.pdf",
+          "page": 125
+        }
+      ]
+    },
+    {
+      "question_id": "6",
+      "answer": "The book running leads for the Hyundai IPO are Kotak Mahindra Capital Company Limited, Citigroup Global Markets India Private Limited, HSBC Securities and Capital Markets (India) Private Limited, J.P. Morgan India Private Limited, and Morgan Stanley India Company Private Limited. \n\n**Evidence:** \"Book Running Lead Managers... Kotak Mahindra Capital Company Limited... Citigroup Global Markets India Private Limited... HSBC Securities and Capital Markets (India) Private Limited... J.P. Morgan India Private Limited... Morgan Stanley India Company Private Limited.\"",
+      "citations": [
+        {
+          "document_id": "1644577140463.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1649222063715.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1646902016643.PDF",
+          "page": 1
+        },
+        {
+          "document_id": "1644761029168.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1718692993829.PDF",
+          "page": 1
+        },
+        {
+          "document_id": "1718692993829.PDF",
+          "page": 2
+        },
+        {
+          "document_id": "1718692993829.PDF",
+          "page": 3
+        },
+        {
+          "document_id": "1718692993829.PDF",
+          "page": 25
+        },
+        {
+          "document_id": "1718692993829.PDF",
+          "page": 26
+        },
+        {
+          "document_id": "1718692993829.PDF",
+          "page": 83
+        },
+        {
+          "document_id": "1718692993829.PDF",
+          "page": 84
+        }
+      ]
+    },
+    {
+      "question_id": "7",
+      "answer": "The aggregated amount raised by Mitsu Chem Plast is \u20b912,500.00 lakhs, and by DeltaTech Gaming Ltd is \u20b95,500 million. There is no information available for First Meridian. \n\n- Mitsu Chem Plast: \"aggregating up to \u20b9 12,500.00 lakhs\" (SOURCE: 1657187215936.pdf)\n- DeltaTech Gaming Ltd: \"aggregating up to \u20b9 5,500 million\" (SOURCE: 1655459382467.pdf)\n- First Meridian: This information is not available in the provided documents.",
+      "citations": [
+        {
+          "document_id": "1657187215936.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1657187215936.pdf",
+          "page": 2
+        },
+        {
+          "document_id": "1657187215936.pdf",
+          "page": 161
+        },
+        {
+          "document_id": "1657187215936.pdf",
+          "page": 186
+        },
+        {
+          "document_id": "1657187215936.pdf",
+          "page": 187
+        },
+        {
+          "document_id": "1657187215936.pdf",
+          "page": 207
+        },
+        {
+          "document_id": "1657187215936.pdf",
+          "page": 208
+        },
+        {
+          "document_id": "1655459382467.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1655459382467.pdf",
+          "page": 134
+        },
+        {
+          "document_id": "1655459382467.pdf",
+          "page": 135
+        },
+        {
+          "document_id": "1655459382467.pdf",
+          "page": 136
+        }
+      ]
+    },
+    {
+      "question_id": "8",
+      "answer": "Sections 115BB and 194BB deal with taxation of prize money from online gaming and horse racing. \n\n- \"115BB: Where the total income of an assessee includes any income by way of winnings from any lottery or crossword puzzle or race including horse race...\" \n- \"194BB: Any person...who is responsible for paying to any person any income by way of winnings from any horse race...\"",
+      "citations": [
+        {
+          "document_id": "income-tax-act-1961-amended-by-finance-no.-2-act-2024 (1).pdf",
+          "page": 1
+        },
+        {
+          "document_id": "income-tax-act-1961-amended-by-finance-no.-2-act-2024 (1).pdf",
+          "page": 263
+        },
+        {
+          "document_id": "income-tax-act-1961-amended-by-finance-no.-2-act-2024 (1).pdf",
+          "page": 278
+        },
+        {
+          "document_id": "income-tax-act-1961-amended-by-finance-no.-2-act-2024 (1).pdf",
+          "page": 416
+        },
+        {
+          "document_id": "income-tax-act-1961-amended-by-finance-no.-2-act-2024 (1).pdf",
+          "page": 417
+        },
+        {
+          "document_id": "income-tax-act-1961-amended-by-finance-no.-2-act-2024 (1).pdf",
+          "page": 598
+        },
+        {
+          "document_id": "income-tax-act-1961-amended-by-finance-no.-2-act-2024 (1).pdf",
+          "page": 599
+        },
+        {
+          "document_id": "1655459382467.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1655459382467.pdf",
+          "page": 132
+        },
+        {
+          "document_id": "1655459382467.pdf",
+          "page": 133
+        },
+        {
+          "document_id": "1655459382467.pdf",
+          "page": 164
+        },
+        {
+          "document_id": "1655459382467.pdf",
+          "page": 165
+        }
+      ]
+    },
+    {
+      "question_id": "9",
+      "answer": "5 complaints were filed. \n\n\"Number of complaints filed during the financial year: 5\"",
+      "citations": [
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 35
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 104
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 105
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 119
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 120
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 121
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 137
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 138
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 152
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 153
+        },
+        {
+          "document_id": "Paytm annual report.pdf",
+          "page": 154
+        }
+      ]
+    },
+    {
+      "question_id": "10",
+      "answer": "The Cravath Scale salary for attorneys from the class of 2018 is $390,000. \n\n\"Class of Cravath US firms ($US) 2018 390,000\"",
+      "citations": [
+        {
+          "document_id": "Taylor-Root-Singapore-law-firm-salary-guide-2023-2024-6.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "Taylor-Root-Singapore-law-firm-salary-guide-2023-2024-6.pdf",
+          "page": 4
+        },
+        {
+          "document_id": "Taylor-Root-Singapore-law-firm-salary-guide-2023-2024-6.pdf",
+          "page": 5
+        },
+        {
+          "document_id": "Taylor-Root-Singapore-law-firm-salary-guide-2023-2024-6.pdf",
+          "page": 6
+        },
+        {
+          "document_id": "Taylor-Root-Singapore-law-firm-salary-guide-2023-2024-6.pdf",
+          "page": 7
+        },
+        {
+          "document_id": "Taylor-Root-Singapore-law-firm-salary-guide-2023-2024-6.pdf",
+          "page": 8
+        },
+        {
+          "document_id": "Taylor-Root-Singapore-law-firm-salary-guide-2023-2024-6.pdf",
+          "page": 9
+        },
+        {
+          "document_id": "Taylor-Root-Singapore-law-firm-salary-guide-2023-2024-6.pdf",
+          "page": 10
+        }
+      ]
+    },
+    {
+      "question_id": "11",
+      "answer": "There are 18 annexures attached. \n\n\"Annexure P-1 to P18\"",
+      "citations": [
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 145
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 146
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 147
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 148
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 149
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 150
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 313
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 314
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 479
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 480
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 481
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 482
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 483
+        },
+        {
+          "document_id": "01. SLP -  cherabuddi Application for Exemption.pdf",
+          "page": 484
+        }
+      ]
+    },
+    {
+      "question_id": "12",
+      "answer": "The stamp duty for the Bikaji SSA is to be borne by the Company. \n\n\"the stamp duty payable on this Agreement and the allotment of Investor Subscription Shares shall be borne by the Company.\"",
+      "citations": [
+        {
+          "document_id": "1648442915512.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1648442915512.pdf",
+          "page": 137
+        },
+        {
+          "document_id": "1645595502807.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1645595502807.pdf",
+          "page": 70
+        },
+        {
+          "document_id": "1645595502807.pdf",
+          "page": 71
+        },
+        {
+          "document_id": "1655095999372.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1655095999372.pdf",
+          "page": 423
+        },
+        {
+          "document_id": "1655095999372.pdf",
+          "page": 424
+        },
+        {
+          "document_id": "SHASPA.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "SHASPA.pdf",
+          "page": 190
+        },
+        {
+          "document_id": "SHASPA.pdf",
+          "page": 191
+        },
+        {
+          "document_id": "SHASPA.pdf",
+          "page": 192
+        },
+        {
+          "document_id": "SHASPA.pdf",
+          "page": 231
+        },
+        {
+          "document_id": "SHASPA.pdf",
+          "page": 232
+        },
+        {
+          "document_id": "SHASPA.pdf",
+          "page": 233
+        },
+        {
+          "document_id": "1652161383291.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1652161383291.pdf",
+          "page": 151
+        }
+      ]
+    },
+    {
+      "question_id": "13",
+      "answer": "This information is not available in the provided documents.",
+      "citations": [
+        {
+          "document_id": "1648442915512.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1648442915512.pdf",
+          "page": 137
+        },
+        {
+          "document_id": "1655095999372.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1655095999372.pdf",
+          "page": 423
+        },
+        {
+          "document_id": "1655095999372.pdf",
+          "page": 424
+        },
+        {
+          "document_id": "[2]_[20-Jan-2022]_Instrument(s) of creation or modification of charge_-20012022.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "[2]_[20-Jan-2022]_Instrument(s) of creation or modification of charge_-20012022.pdf",
+          "page": 2
+        },
+        {
+          "document_id": "1652161383291.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1652161383291.pdf",
+          "page": 151
+        },
+        {
+          "document_id": "1647922049984.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1647922049984.pdf",
+          "page": 181
+        },
+        {
+          "document_id": "1647922049984.pdf",
+          "page": 182
+        }
+      ]
+    },
+    {
+      "question_id": "14",
+      "answer": "Suzlon Energy was incorporated on the tenth day of April 1995. \n\n\"which was incorporated under The Companies Act, 1956, on the TENTH APRIL day of 1995\"",
+      "citations": [
+        {
+          "document_id": "MOA-and-AOA of Suzlon.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "MOA-and-AOA of Suzlon.pdf",
+          "page": 2
+        },
+        {
+          "document_id": "MOA-and-AOA of Suzlon.pdf",
+          "page": 3
+        },
+        {
+          "document_id": "MOA-and-AOA of Suzlon.pdf",
+          "page": 18
+        },
+        {
+          "document_id": "MOA-and-AOA of Suzlon.pdf",
+          "page": 20
+        },
+        {
+          "document_id": "MOA-and-AOA of Suzlon.pdf",
+          "page": 21
+        },
+        {
+          "document_id": "MOA-and-AOA of Suzlon.pdf",
+          "page": 205
+        },
+        {
+          "document_id": "MOA-and-AOA of Suzlon.pdf",
+          "page": 206
+        },
+        {
+          "document_id": "MOA-and-AOA of Suzlon.pdf",
+          "page": 212
+        },
+        {
+          "document_id": "MOA-and-AOA of Suzlon.pdf",
+          "page": 213
+        },
+        {
+          "document_id": "MOA-and-AOA of Suzlon.pdf",
+          "page": 214
+        }
+      ]
+    },
+    {
+      "question_id": "15",
+      "answer": "This information is not available in the provided documents.",
+      "citations": [
+        {
+          "document_id": "1718362092516.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "1718362092516.pdf",
+          "page": 14
+        },
+        {
+          "document_id": "CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf",
+          "page": 1
+        },
+        {
+          "document_id": "CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf",
+          "page": 2
+        },
+        {
+          "document_id": "CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf",
+          "page": 3
+        },
+        {
+          "document_id": "CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf",
+          "page": 6
+        },
+        {
+          "document_id": "CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf",
+          "page": 7
+        },
+        {
+          "document_id": "CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf",
+          "page": 13
+        },
+        {
+          "document_id": "CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf",
+          "page": 14
+        },
+        {
+          "document_id": "CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf",
+          "page": 15
+        },
+        {
+          "document_id": "CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf",
+          "page": 16
+        },
+        {
+          "document_id": "CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf",
+          "page": 17
+        },
+        {
+          "document_id": "CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf",
+          "page": 18
+        },
+        {
+          "document_id": "CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf",
+          "page": 19
+        }
+      ]
+    }
+  ]
+}

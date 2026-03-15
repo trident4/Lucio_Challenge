@@ -11,6 +11,7 @@ import tempfile
 import zipfile
 
 import httpx
+import pyzipper
 
 logger = logging.getLogger("lucio.fetcher")
 
@@ -65,19 +66,29 @@ async def fetch_corpus(corpus_url: str) -> str:
         raise
 
 
-def unzip_to_tuples(source: str | io.BytesIO) -> list[tuple[str, bytes]]:
+def unzip_to_tuples(
+    source: str | io.BytesIO, password: str | None = None,
+) -> list[tuple[str, bytes]]:
     """Extract zip contents into picklable (filename, raw_bytes) tuples.
 
-    Filters to .pdf/.docx only, skips __MACOSX and dot-files.
+    Filters to .pdf/.docx/.xlsx only, skips __MACOSX and dot-files.
+    Supports AES-encrypted zips via pyzipper when a password is provided.
 
     Args:
         source: File path or in-memory BytesIO of the zip.
+        password: Optional password for encrypted zip files.
 
     Returns:
         List of (filename, file_bytes) tuples ready for multiprocessing.
     """
+    pwd = password.encode() if password else None
+    # Use pyzipper for AES support when password is provided, plain zipfile otherwise
+    opener = pyzipper.AESZipFile if pwd else zipfile.ZipFile
+
     tuples = []
-    with zipfile.ZipFile(source, "r") as zf:
+    with opener(source, "r") as zf:
+        if pwd:
+            zf.setpassword(pwd)
         for name in zf.namelist():
             # Skip directories
             if name.endswith("/"):

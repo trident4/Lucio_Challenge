@@ -17,7 +17,7 @@ import re
 logger = logging.getLogger("lucio.retriever")
 
 # Tantivy reserved characters that must be escaped in user queries.
-TANTIVY_SPECIAL = re.compile(r'([+\\^`~*?\\\\/()\\[\\]{}"!\\-:&|])')
+TANTIVY_SPECIAL = re.compile(r'([+^`~*?/()\[\]{}"!\-:&|\\])')
 
 # Pattern to extract proper nouns / named entities (capitalized multi-word phrases)
 # Matches sequences of capitalized words like "Eastman Kodak", "Meta", "CCI", "NVCA IRA"
@@ -29,7 +29,7 @@ ENTITY_PATTERN = re.compile(
 
 def _escape_query(text: str) -> str:
     """Escape Tantivy reserved characters in query text."""
-    return TANTIVY_SPECIAL.sub(r"\\\\\\1", text)
+    return TANTIVY_SPECIAL.sub(r"\\\1", text)
 
 
 def _extract_entities(question_text: str) -> list[str]:
@@ -84,7 +84,13 @@ def _extract_entities(question_text: str) -> list[str]:
 def _search_one(index, searcher, question_text: str, top_k: int) -> list[dict]:
     """Execute a single BM25 search (synchronous — called from thread)."""
     safe_query = _escape_query(question_text)
-    query = index.parse_query(safe_query, ["text"])
+    try:
+        query = index.parse_query(safe_query, ["text"])
+    except Exception:
+        # Fallback: strip all non-alphanumeric chars and retry
+        fallback = re.sub(r"[^a-zA-Z0-9\s]", " ", question_text)
+        logger.warning(f"Query parse failed, using fallback: {fallback!r}")
+        query = index.parse_query(fallback, ["text"])
     search_result = searcher.search(query, top_k)
 
     results = []

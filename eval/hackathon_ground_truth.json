@@ -1,0 +1,80 @@
+{
+  "corpus_url": "",
+  "questions": [
+    {
+      "id": "h1",
+      "text": "What is the main alternative to SUMO for academic research and how is it different?",
+      "assertions": []
+    },
+    {
+      "id": "h2",
+      "text": "Which location has the highest value in the Banking Transactions dataset?",
+      "assertions": []
+    },
+    {
+      "id": "h3",
+      "text": "Where and when was the KMIL Amendment executed?",
+      "assertions": []
+    },
+    {
+      "id": "h4",
+      "text": "In the Satyam College of Engineering, what is the subject taught on wednesdays between 10:20 and 11:10?",
+      "assertions": []
+    },
+    {
+      "id": "h5",
+      "text": "What was EBCs annual revenues form operations in the years from 2018-2021",
+      "assertions": []
+    },
+    {
+      "id": "h6",
+      "text": "Who are the book running leads for the Hyundai IPO?",
+      "assertions": []
+    },
+    {
+      "id": "h7",
+      "text": "Compare the aggregated amount raised by Mitsu Chem Plast, DeltaTech Gaming Ltd, First Meridian",
+      "assertions": []
+    },
+    {
+      "id": "h8",
+      "text": "Which sections of the Income Tax Act deal with taxation of prize money from online gaming and horse racing?",
+      "assertions": []
+    },
+    {
+      "id": "h9",
+      "text": "How many sexual harassment complaints were filed in the 22-23 FY in Paytm?",
+      "assertions": []
+    },
+    {
+      "id": "h10",
+      "text": "What is the Cravath Scale salary for attorneys from the class of 2018?",
+      "assertions": []
+    },
+    {
+      "id": "h11",
+      "text": "In the Cherabuddi Educational Society SLP, how many annexures are attached?",
+      "assertions": []
+    },
+    {
+      "id": "h12",
+      "text": "For Bikaji SSA, what is the stamp duty?",
+      "assertions": []
+    },
+    {
+      "id": "h13",
+      "text": "What is the stamp duty for DTD-29-03-2025-Final.pdf",
+      "assertions": []
+    },
+    {
+      "id": "h14",
+      "text": "When was Suzlon Energy Incorporated?",
+      "assertions": []
+    },
+    {
+      "id": "h15",
+      "text": "Who is the investigating officer assigned for the case in CHALAN--FIR NO-483-14 U-S-420,406-merged.pdf and what is his rank?",
+      "assertions": []
+    }
+  ]
+}

@@ -22,6 +22,7 @@ class ChallengeRequest(BaseModel):
 
     corpus_url: str
     questions: list[Question]
+    password: str | None = None  # Password for encrypted zip files
     llm_model: str | None = None  # Optional override for model benchmarking
     rerank_top_k: int | None = None  # Optional override for context tuning
     bypass_cache: bool = False  # Force cold start for fair benchmarking
