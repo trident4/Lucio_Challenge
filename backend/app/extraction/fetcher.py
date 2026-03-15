@@ -15,7 +15,7 @@ import httpx
 logger = logging.getLogger("lucio.fetcher")
 
 # Only extract these file types from the zip
-ALLOWED_EXTENSIONS = {".pdf", ".docx"}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx"}
 
 # Skip these junk paths
 SKIP_PREFIXES = ("__MACOSX/", "._")

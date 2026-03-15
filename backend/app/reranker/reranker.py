@@ -4,10 +4,13 @@ Two-stage reranking:
 1. Compute BM25 rank (from Tantivy scores) and embedding rank (cosine similarity)
 2. Combine via Reciprocal Rank Fusion for more robust scoring
 
-Then enrich with ±1 neighboring chunks for LLM context continuity.
+Then enrich with context:
+- Prose (PDF/DOCX): ±1 neighboring chunks for continuity
+- Tabular (XLSX): no neighbors (avoids 3× duplication), sheet name labels instead
 """
 
 import logging
+import re
 from collections import defaultdict
 
 import numpy as np
@@ -119,26 +122,35 @@ def rerank_all(
                 f"[SOURCE: {hc['filename']} — DOCUMENT HEADER]\n{hc['content']}"
             )
 
-        # Then top reranked chunks with neighbors
+        # Then top reranked chunks with context enrichment
         for c in top_chunks:
             chunk_idx = _extract_chunk_index(c["chunk_id"])
             filename = c["filename"]
 
-            parts = []
-            # Previous chunk (context_before)
-            prev_content = global_chunks_by_file.get((filename, chunk_idx - 1))
-            if prev_content:
-                parts.append(prev_content)
+            if filename.lower().endswith(".xlsx"):
+                # XLSX: no neighbor expansion — consecutive xlsx chunks in top-K
+                # cause each chunk to appear ~3× via overlapping ±1 windows,
+                # tripling context size with duplicate table rows.
+                # Instead, label with sheet name so LLM can orient.
+                sheet_name = _extract_sheet_name(c.get("text", ""))
+                prefix = f"Sheet: {sheet_name}\n\n" if sheet_name else ""
+                context_parts.append(
+                    f"[SOURCE: {filename}]\n{prefix}{c['content']}"
+                )
+            else:
+                # Prose: ±1 neighbor expansion for context continuity
+                parts = []
+                prev_content = global_chunks_by_file.get((filename, chunk_idx - 1))
+                if prev_content:
+                    parts.append(prev_content)
 
-            # Main chunk
-            parts.append(c["content"])
+                parts.append(c["content"])
 
-            # Next chunk (context_after)
-            next_content = global_chunks_by_file.get((filename, chunk_idx + 1))
-            if next_content:
-                parts.append(next_content)
+                next_content = global_chunks_by_file.get((filename, chunk_idx + 1))
+                if next_content:
+                    parts.append(next_content)
 
-            context_parts.append(f"[SOURCE: {filename}]\n" + "\n---\n".join(parts))
+                context_parts.append(f"[SOURCE: {filename}]\n" + "\n---\n".join(parts))
 
         # Include header chunks in sources
         all_source_chunks = header_chunks + top_chunks
@@ -178,3 +190,12 @@ def _extract_chunk_index(chunk_id: str) -> int:
         return int(chunk_id.split("::chunk_")[-1])
     except (ValueError, IndexError):
         return -1
+
+
+_SHEET_NAME_RE = re.compile(r"Sheet: ([^\]]+)\]")
+
+
+def _extract_sheet_name(text: str) -> str:
+    """Extract sheet name from an xlsx chunk's [HEADER: ... | Sheet: X] tag."""
+    m = _SHEET_NAME_RE.search(text)
+    return m.group(1).strip() if m else ""

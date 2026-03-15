@@ -1,0 +1,74 @@
+[
+  {
+    "id": "xlsx_01",
+    "text": "What was the net income in Q3 2024?",
+    "expected": "6922.5",
+    "type": "direct_lookup"
+  },
+  {
+    "id": "xlsx_02",
+    "text": "How much cash did the company have at the end of December 2024?",
+    "expected": "25000",
+    "type": "direct_lookup"
+  },
+  {
+    "id": "xlsx_03",
+    "text": "Which quarter in 2024 had the highest total revenue?",
+    "expected": "Q4 2024 with 61800",
+    "type": "cross_column"
+  },
+  {
+    "id": "xlsx_04",
+    "text": "Did operating income grow or shrink between Q1 2024 and Q4 2024?",
+    "expected": "Grew from 9860 to 11040",
+    "type": "cross_column"
+  },
+  {
+    "id": "xlsx_05",
+    "text": "What was the company's debt-to-equity ratio at the end of 2024?",
+    "expected": "Total Liabilities 44900 / Total Equity 67250 = ~0.67",
+    "type": "cross_sheet"
+  },
+  {
+    "id": "xlsx_06",
+    "text": "How does the revenue growth from FY 2023 to FY 2024 compare to the increase in accounts receivable over the same period?",
+    "expected": "Revenue grew from 205700 to 226000 (~9.9%). AR grew from 15000 to 18200 (~21.3%). AR growing faster than revenue.",
+    "type": "cross_sheet"
+  },
+  {
+    "id": "xlsx_07",
+    "text": "What was the total Enterprise revenue in Europe across all products in Q4 2024?",
+    "expected": "Sum of Europe/Enterprise rows for Q4 2024 column",
+    "type": "segment_drilldown"
+  },
+  {
+    "id": "xlsx_08",
+    "text": "Which region generated the most Cloud Platform revenue in Q4 2024?",
+    "expected": "Sum Cloud Platform Q4 2024 by region, identify highest",
+    "type": "segment_drilldown"
+  },
+  {
+    "id": "xlsx_09",
+    "text": "When is the next board meeting scheduled?",
+    "expected": "2025-04-10 (Board Strategy Offsite)",
+    "type": "date_lookup"
+  },
+  {
+    "id": "xlsx_10",
+    "text": "What was the company's free cash flow in FY 2024?",
+    "expected": "21717.5",
+    "type": "direct_lookup"
+  },
+  {
+    "id": "xlsx_11",
+    "text": "How many product categories does the company sell across its segments?",
+    "expected": "6: Cloud Platform, Data Analytics, Security Suite, AI/ML Services, DevOps Tools, IoT Platform",
+    "type": "counting"
+  },
+  {
+    "id": "xlsx_12",
+    "text": "List all regions where the company operates.",
+    "expected": "North America, Europe, Asia Pacific, Latin America, Middle East & Africa",
+    "type": "listing"
+  }
+]

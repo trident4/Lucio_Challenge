@@ -65,6 +65,102 @@
         {"type": "contains_any", "values": ["would not", "not required", "not have to", "does not", "no notification", "not need"], "label": "Answer is No (not required)"},
         {"type": "contains_any", "values": ["Target Exemption", "threshold", "below"], "label": "Mentions threshold/exemption reasoning"}
       ]
+    },
+    {
+      "id": "xlsx_01",
+      "text": "According to the Income Statement in the Excel financial report, what was the net income in Q3 2024?",
+      "assertions": [
+        {"type": "contains", "value": "6922.5", "label": "Net Income Q3 2024 is 6922.5"}
+      ]
+    },
+    {
+      "id": "xlsx_02",
+      "text": "According to the Balance Sheet in the Excel financial report, how much cash did the company have at the end of December 2024?",
+      "assertions": [
+        {"type": "contains_any", "values": ["25000", "25,000"], "label": "Cash at end of Dec 2024 is 25000"}
+      ]
+    },
+    {
+      "id": "xlsx_03",
+      "text": "According to the Income Statement in the Excel financial report, which quarter in 2024 had the highest total revenue?",
+      "assertions": [
+        {"type": "contains", "value": "Q4", "label": "Identifies Q4 2024 as highest"},
+        {"type": "contains_any", "values": ["61800", "61,800"], "label": "Q4 2024 revenue is 61800"}
+      ]
+    },
+    {
+      "id": "xlsx_04",
+      "text": "In the Excel financial report, did operating income grow or shrink between Q1 2024 and Q4 2024?",
+      "assertions": [
+        {"type": "contains_any", "values": ["grew", "grow", "grown", "increased", "increase"], "label": "Identifies growth"},
+        {"type": "contains_any", "values": ["9860", "9,860"], "label": "Q1 2024 operating income is 9860"},
+        {"type": "contains_any", "values": ["11040", "11,040"], "label": "Q4 2024 operating income is 11040"}
+      ]
+    },
+    {
+      "id": "xlsx_05",
+      "text": "Based on the Balance Sheet in the Excel financial report, what was the company's debt-to-equity ratio at the end of 2024?",
+      "assertions": [
+        {"type": "contains_any", "values": ["0.67", "0.668", "0.66", "44900", "67250"], "label": "Debt-to-equity ratio ~0.67 or component figures (44900/67250)"}
+      ]
+    },
+    {
+      "id": "xlsx_06",
+      "text": "Using the Excel financial report, compare the percentage revenue growth from FY 2023 to FY 2024 versus the percentage increase in accounts receivable over the same period. Which grew at a faster rate?",
+      "assertions": [
+        {"type": "contains_any", "values": ["205700", "205,700", "226000", "226,000"], "label": "Mentions revenue figures (FY 2023 or FY 2024)"},
+        {"type": "contains_any", "values": ["15000", "15,000", "18200", "18,200"], "label": "Mentions AR figures (Dec 2023 or Dec 2024)"},
+        {"type": "contains_any", "values": ["faster", "outpac", "higher rate", "greater rate", "more rapid", "higher than", "greater than", "exceeded", "outgrew", "21.3", "21.33", "22.2"], "label": "Identifies AR growing faster than revenue"}
+      ]
+    },
+    {
+      "id": "xlsx_07",
+      "text": "In the Revenue by Segment sheet of the Excel financial report, what was the total Enterprise revenue in Europe across all products in Q4 2024?",
+      "assertions": [
+        {"type": "contains_any", "values": ["29669", "29,669"], "label": "Total is 29669"}
+      ]
+    },
+    {
+      "id": "xlsx_08",
+      "text": "According to the Revenue by Segment data in the Excel financial report, which region generated the most total Cloud Platform revenue in Q4 2024?",
+      "assertions": [
+        {"type": "contains", "value": "Asia Pacific", "label": "Identifies Asia Pacific as highest"}
+      ]
+    },
+    {
+      "id": "xlsx_09",
+      "text": "According to the Key Dates sheet in the Excel financial report, when is the next board meeting scheduled?",
+      "assertions": [
+        {"type": "contains_any", "values": ["2025-04-10", "April 10"], "label": "Board meeting date is April 10, 2025"},
+        {"type": "contains_any", "values": ["Offsite", "offsite", "Strategy", "strategy"], "label": "Identifies it as strategy offsite"}
+      ]
+    },
+    {
+      "id": "xlsx_10",
+      "text": "According to the Cash Flow Statement in the Excel financial report, what was the company's free cash flow in FY 2024?",
+      "assertions": [
+        {"type": "contains_any", "values": ["21717.5", "21,717.5", "21717", "21,717"], "label": "Free Cash Flow FY 2024 is 21717.5"}
+      ]
+    },
+    {
+      "id": "xlsx_11",
+      "text": "According to the Revenue by Segment sheet in the Excel financial report, how many product categories does the company sell?",
+      "assertions": [
+        {"type": "contains_any", "values": ["six", "6"], "label": "Count is 6"},
+        {"type": "contains", "value": "Cloud Platform", "label": "Names Cloud Platform"},
+        {"type": "contains_any", "values": ["AI/ML", "AI\\/ML"], "label": "Names AI/ML Services"}
+      ]
+    },
+    {
+      "id": "xlsx_12",
+      "text": "According to the Revenue by Segment data in the Excel financial report, list all geographic regions.",
+      "assertions": [
+        {"type": "contains", "value": "North America", "label": "Names North America"},
+        {"type": "contains", "value": "Europe", "label": "Names Europe"},
+        {"type": "contains", "value": "Asia Pacific", "label": "Names Asia Pacific"},
+        {"type": "contains", "value": "Latin America", "label": "Names Latin America"},
+        {"type": "contains", "value": "Middle East", "label": "Names Middle East & Africa"}
+      ]
     }
   ],
   "battle_test_questions": [

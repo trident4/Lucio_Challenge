@@ -3,6 +3,7 @@
 All functions are top-level (picklable) for ProcessPoolExecutor.
 PDF: PyMuPDF layout mode, ~2000-char chunks with 200-char overlap.
 DOCX: python-docx, ~2000-char chunks with 200-char overlap.
+XLSX: openpyxl, table-aware markdown chunks with header repetition.
 
 Chunks are small and focused (~half a page) so that:
 - Embeddings capture specific content, not diffuse 5-page averages
@@ -10,6 +11,7 @@ Chunks are small and focused (~half a page) so that:
 - Full chunk text can be sent to the LLM without truncation
 """
 
+import datetime
 import io
 import logging
 import os
@@ -18,6 +20,7 @@ from concurrent.futures import ProcessPoolExecutor
 
 import docx
 import fitz  # PyMuPDF
+import openpyxl
 
 logger = logging.getLogger("lucio.workers")
 
@@ -41,6 +44,8 @@ def _classify_document(filename: str) -> str:
         return "Earnings transcript"
     if " v. " in filename or " v " in filename:
         return "Legal case"
+    if filename.lower().endswith(".xlsx"):
+        return "Financial data"
     if filename.lower().endswith(".docx"):
         return "Agreement/Contract"
     return "Document"
@@ -99,6 +104,8 @@ def extract_document(filename: str, file_bytes: bytes) -> tuple[list[dict], dict
         return _extract_pdf(filename, file_bytes)
     elif ext == ".docx":
         return _extract_docx(filename, file_bytes)
+    elif ext == ".xlsx":
+        return _extract_xlsx(filename, file_bytes)
     else:
         return [], {"filename": filename, "title": "", "page_count": 0}
 
@@ -183,6 +190,153 @@ def _extract_docx(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
         "page_count": 0,
     }
     return chunks, metadata
+
+
+# ── XLSX Extraction ─────────────────────────────────────────────────────────
+
+
+def _extract_xlsx(filename: str, file_bytes: bytes) -> tuple[list[dict], dict]:
+    """Extract tabular data from an Excel workbook as markdown table chunks.
+
+    Each sheet is converted to a markdown table and split into chunks
+    that respect row boundaries. The header row is repeated in every chunk.
+    """
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+
+    all_chunks: list[dict] = []
+    sheet_count = 0
+    chunk_idx = 0
+
+    for sheet_num, ws in enumerate(wb.worksheets, start=1):
+        rows = list(ws.iter_rows(values_only=True))
+        trimmed, col_start, col_end = _trim_empty(rows)
+        if len(trimmed) < 2:  # need header + at least one data row
+            continue
+
+        sheet_count += 1
+        header_row = trimmed[0]
+        data_rows = trimmed[1:]
+
+        md_header = _make_md_header(header_row, col_start, col_end)
+        header_tag = f"Excel: {filename} | Sheet: {ws.title}"
+
+        chunks = _split_table_into_chunks(
+            data_rows, md_header, header_tag, filename, col_start, col_end,
+            sheet_num, chunk_idx,
+        )
+        chunk_idx += len(chunks)
+        all_chunks.extend(chunks)
+
+    wb.close()
+
+    metadata = {
+        "filename": filename,
+        "title": filename,
+        "type": _classify_document(filename),
+        "page_count": sheet_count,
+    }
+    return all_chunks, metadata
+
+
+def _trim_empty(rows: list[tuple]) -> tuple[list[tuple], int, int]:
+    """Remove fully-empty rows and find column bounds.
+
+    Returns:
+        (non_empty_rows, col_start, col_end) where col_start/col_end
+        are the min/max column indices with data (inclusive).
+    """
+    non_empty = [r for r in rows if any(c is not None for c in r)]
+    if not non_empty:
+        return [], 0, 0
+
+    col_start = min(
+        i for r in non_empty for i, c in enumerate(r) if c is not None
+    )
+    col_end = max(
+        i for r in non_empty for i, c in enumerate(r) if c is not None
+    )
+    return non_empty, col_start, col_end
+
+
+def _format_cell(value) -> str:
+    """Format a cell value for markdown table output."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, float):
+        if value == int(value):
+            return str(int(value))
+        return str(value)
+    if isinstance(value, datetime.datetime):
+        if value.hour == 0 and value.minute == 0 and value.second == 0:
+            return value.strftime("%Y-%m-%d")
+        return str(value)
+    if isinstance(value, datetime.date):
+        return value.strftime("%Y-%m-%d")
+    s = str(value)
+    return s.replace("|", "\\|")
+
+
+def _make_md_header(header_row: tuple, col_start: int, col_end: int) -> str:
+    """Create markdown table header and separator lines."""
+    cells = [_format_cell(header_row[i]) for i in range(col_start, col_end + 1)]
+    header_line = "| " + " | ".join(cells) + " |"
+    sep_line = "| " + " | ".join("---" for _ in cells) + " |"
+    return header_line + "\n" + sep_line
+
+
+def _format_row(row: tuple, col_start: int, col_end: int) -> str:
+    """Format one data row as a markdown table row."""
+    cells = [_format_cell(row[i]) if i < len(row) else "" for i in range(col_start, col_end + 1)]
+    return "| " + " | ".join(cells) + " |"
+
+
+def _split_table_into_chunks(
+    data_rows: list[tuple],
+    md_header: str,
+    header_tag: str,
+    filename: str,
+    col_start: int,
+    col_end: int,
+    sheet_num: int,
+    start_chunk_idx: int,
+) -> list[dict]:
+    """Split table data rows into chunks, repeating the markdown header in each.
+
+    No overlap — repeating financial data rows would confuse the LLM
+    with duplicate numbers.
+    """
+    header_overhead = len(md_header) + 1  # +1 for newline after header
+    budget = CHUNK_SIZE - header_overhead
+
+    chunks: list[dict] = []
+    current_rows: list[str] = []
+    current_size = 0
+    chunk_idx = start_chunk_idx
+
+    for row in data_rows:
+        formatted = _format_row(row, col_start, col_end)
+        row_size = len(formatted) + 1  # +1 for newline
+
+        # If adding this row exceeds budget and we have rows, flush the chunk
+        if current_rows and current_size + row_size > budget:
+            content = md_header + "\n" + "\n".join(current_rows)
+            chunks.append(_make_chunk(filename, header_tag, content, [sheet_num], chunk_idx))
+            chunk_idx += 1
+            current_rows = []
+            current_size = 0
+
+        # Always add the row (handles oversize single rows)
+        current_rows.append(formatted)
+        current_size += row_size
+
+    # Flush remaining rows
+    if current_rows:
+        content = md_header + "\n" + "\n".join(current_rows)
+        chunks.append(_make_chunk(filename, header_tag, content, [sheet_num], chunk_idx))
+
+    return chunks
 
 
 # ── Core Chunking Logic ────────────────────────────────────────────────────

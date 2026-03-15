@@ -1,4 +1,4 @@
-"""Phase 5: Unified LLM inference via Qwen-30B on Mac Studio.
+"""Phase 5: Unified LLM inference.
 
 Fires all question prompts concurrently via asyncio.gather.
 Includes a keyword heuristic that injects corpus-level document
@@ -16,14 +16,19 @@ from app.config import Settings
 
 logger = logging.getLogger("lucio.inference")
 
-SYSTEM_PROMPT = """You are an expert legal AI. Answer the user's question with maximum precision and extreme brevity using ONLY the provided context.
+SYSTEM_PROMPT = """You are an expert document analysis AI. Answer the user's question with maximum precision and extreme brevity using ONLY the provided context.
 
-1. EXTREME BREVITY: Answer the question directly in the very first sentence. Do not add conversational filler, legal disclaimers, or unnecessary background. Output the absolute minimum words required.
-2. EXACT EVIDENCE: After your direct answer, provide a short, targeted quote from the text that proves it. 
-3. LEGAL NUANCE: Pay strict attention to defined terms (Capitalized Words), carve-outs ("except as..."), and conditions ("subject to"). Include them if relevant to the answer.
-4. PARTIAL/MISSING INFO: If the context only partially answers the question, give the partial answer and concisely state what is missing. If the answer is completely absent, output EXACTLY: "This information is not available in the provided documents."
-5. CONFLICTS: If different chunks conflict, state the contradiction in one sentence and cite both.
-6. COUNTING/LISTING: When VERIFIED DOCUMENT COUNTS are provided, use those exact counts and names as ground truth. Do not recount or reinterpret the document index.
+1. EXTREME BREVITY: Answer directly in the first sentence. No filler, no disclaimers, no unnecessary background. Minimum words required.
+2. EXACT EVIDENCE: After your answer, cite a short quote or data point from the context that proves it.
+3. PRECISION: For legal text, respect defined terms, carve-outs ("except as..."), and conditions ("subject to"). For financial/tabular data, use exact figures from the source — do not round or approximate.
+4. TABULAR DATA: Context may contain markdown tables from spreadsheets, labeled with "Sheet: <name>". To answer:
+   - Match the sheet name mentioned in the question to the correct table.
+   - Use column headers (row 1) to identify the correct column, and row labels (column 1) to identify the correct row.
+   - When asked for a total or sum, add ALL matching rows — do not stop at the first match. Show the arithmetic.
+   - When asked to list or count distinct values, scan the entire column across all table chunks.
+5. PARTIAL/MISSING INFO: If the context only partially answers, give the partial answer and state what is missing. Only say "This information is not available in the provided documents." if the answer is truly absent.
+6. CONFLICTS: If sources conflict, state the contradiction in one sentence and cite both.
+7. COUNTING/LISTING: When VERIFIED DOCUMENT COUNTS are provided, use those exact counts and names as ground truth. Do not recount or reinterpret the document index.
 
 Remember: Speed and factual density are critical. Prioritize direct facts over exhaustive explanations.
 """
@@ -49,7 +54,7 @@ def _build_type_summary(doc_metadata: list[dict]) -> str:
     groups: dict[str, list[str]] = defaultdict(list)
     for m in doc_metadata:
         doc_type = m.get("type", "Document")
-        name = re.sub(r"\.(pdf|docx)$", "", m["filename"], flags=re.IGNORECASE).strip()
+        name = re.sub(r"\.(pdf|docx|xlsx)$", "", m["filename"], flags=re.IGNORECASE).strip()
         groups[doc_type].append(name)
 
     lines = [
